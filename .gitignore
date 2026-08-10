@@ -3,8 +3,10 @@ node_modules/
 
 # Build output
 dist/
+.next/
+out/
 
-# Data files (operation queues, local state)
+# Data files
 data/
 
 # Environment files
@@ -17,6 +19,7 @@ data/
 .idea/
 *.swp
 *.swo
+.kiro
 
 # OS
 .DS_Store
@@ -26,7 +29,7 @@ Thumbs.db
 coverage/
 .hypothesis/
 
-# TypeScript incremental compilation
+# TypeScript
 *.tsbuildinfo
 
 # Logs

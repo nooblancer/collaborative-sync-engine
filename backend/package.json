@@ -1,0 +1,36 @@
+{
+  "name": "collaborative-sync-engine",
+  "version": "1.0.0",
+  "description": "A distributed collaborative sync engine using CRDTs for real-time multiplayer collaboration",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest --run",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "crdt",
+    "sync",
+    "collaborative",
+    "real-time",
+    "websocket"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ioredis": "^5.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/pg": "^8.11.11",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.13",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
+}

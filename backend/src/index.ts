@@ -7,7 +7,8 @@
  * Requirements: 1.1, 1.4, 7.1, 7.6
  */
 
-import { createServer as createHttpServer, type Server } from "http";
+import { createServer as createHttpServer, type Server, type IncomingMessage, type ServerResponse } from "http";
+import jwt from "jsonwebtoken";
 import Redis from "ioredis";
 import { ConnectionManager, type ConnectionManagerConfig } from "./connection/connection-manager.js";
 import { SyncEngine } from "./engine/sync-engine.js";
@@ -142,9 +143,37 @@ export async function createServer(config?: Partial<ServerConfig>): Promise<Serv
     resolvedConfig.snapshotIntervalMs
   );
 
-  // 7. Create HTTP server with WebSocket upgrade handling
-  const httpServer = createHttpServer((_req, res) => {
-    // Basic health check endpoint
+  // 7. Create HTTP server with token endpoint and health check
+  const httpServer = createHttpServer((req, res) => {
+    // CORS headers for frontend
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(req.url ?? "/", `http://localhost:${resolvedConfig.port}`);
+
+    // Token endpoint — generates a JWT for the requesting user
+    if (url.pathname === "/token") {
+      const userId = url.searchParams.get("userId") || "anon-" + Date.now().toString(36);
+      const displayName = url.searchParams.get("displayName") || "Anonymous";
+      const sessionId = url.searchParams.get("sessionId") || "default-session";
+      const token = jwt.sign(
+        { userId, displayName, sessionId },
+        resolvedConfig.jwtSecret,
+        { expiresIn: "1h" }
+      );
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ token }));
+      return;
+    }
+
+    // Health check
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: "ok", engine: "collaborative-sync-engine" }));
   });

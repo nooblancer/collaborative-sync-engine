@@ -1,6 +1,6 @@
 # Collaborative Sync Engine
 
-A distributed real-time collaboration engine using **CRDTs** (Conflict-free Replicated Data Types) for multiplayer state synchronization. Built with Node.js and TypeScript.
+A distributed real-time collaboration engine using **CRDTs** (Conflict-free Replicated Data Types) for multiplayer state synchronization. Full-stack monorepo with a Node.js/TypeScript backend and a Next.js 14 frontend.
 
 ## What It Does
 
@@ -17,64 +17,94 @@ Key capabilities:
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Client A   │     │  Client B   │     │  Client N   │
-│ Local State │     │ Local State │     │ Local State │
-│   + Queue   │     │   + Queue   │     │   + Queue   │
-└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       │ WebSocket         │ WebSocket         │ WebSocket
-       └───────────────────┼───────────────────┘
-                           │
-              ┌────────────┴────────────┐
-              │   Connection Manager    │
-              │  (Auth, Heartbeat,      │
-              │   Presence, Routing)    │
-              └────────────┬────────────┘
-                           │
-              ┌────────────┴────────────┐
-              │      Sync Engine        │
-              │  (Validate → Merge →    │
-              │   Persist → Broadcast)  │
-              └────────────┬────────────┘
-                           │
-              ┌────────────┴────────────┐
-              │   Persistence Layer     │
-              │  PostgreSQL + Redis     │
-              └─────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     Frontend (Next.js 14)                     │
+│  Landing Page (RSC) │ Demo App (Client Component)            │
+│                     │  useWebSocket → usePresence            │
+│                     │  useInventory → EventLog               │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTP /token + WebSocket
+┌──────────────────────────────┴──────────────────────────────┐
+│                    Backend (Node.js)                          │
+│  Token Endpoint → Connection Manager → Sync Engine           │
+│                   (Auth, Heartbeat,    (Validate, Merge,     │
+│                    Presence, Routing)   Persist, Broadcast)   │
+│                                              │               │
+│                              Persistence Layer               │
+│                          PostgreSQL + Redis                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
+# Install all dependencies
+npm run install:all
 
-# Run tests (268 tests, all passing)
-npm test
+# Run both backend and frontend in development
+npm run dev
 
-# Run the interactive demo (opens in browser)
-npx tsx demo-frontend.ts
-# Then open http://localhost:4567 in multiple tabs
-
-# Run the CLI demo
-npx tsx demo.ts
-
-# Build for production
-npm run build
-
-# Start the server
-npm start
+# Or run them separately:
+npm run dev:backend    # Backend on http://localhost:8080
+npm run dev:frontend   # Frontend on http://localhost:3000
 ```
 
-## Demo
+Then open **http://localhost:3000** in your browser. The landing page describes the engine; click "Launch Demo" to open the interactive collaborative inventory app.
 
-The interactive demo shows real-time collaboration:
+Open the demo in **multiple browser tabs** to see real-time collaboration — each tab gets a random user identity.
+
+## Project Structure
+
+```
+collaborative-sync-engine/
+├── backend/                    # Node.js + TypeScript CRDT engine
+│   ├── src/
+│   │   ├── types/             # TypeScript interfaces
+│   │   ├── engine/            # CRDT merge, HLC, validation, delta
+│   │   ├── connection/        # WebSocket server, auth, heartbeat, presence
+│   │   ├── persistence/       # PostgreSQL, Redis cache, snapshots
+│   │   ├── client/            # Client SDK (local replica, queue)
+│   │   └── index.ts           # Server entry point (/token + WebSocket)
+│   ├── package.json
+│   └── tsconfig.json
+├── frontend/                   # Next.js 14 App Router
+│   ├── app/
+│   │   ├── page.tsx           # Landing page (Server Component)
+│   │   ├── demo/page.tsx      # Interactive demo (Client Component)
+│   │   ├── layout.tsx         # Root layout (fonts, theme)
+│   │   └── globals.css        # Tailwind + CSS variables
+│   ├── components/
+│   │   ├── ui/                # Button, Badge, Card, Input, Table
+│   │   ├── landing/           # Navbar, Hero, Architecture, Features...
+│   │   └── demo/              # ConnectionStatus, Presence, Inventory, EventLog
+│   ├── hooks/
+│   │   ├── use-websocket.ts   # WebSocket lifecycle + auto-reconnect
+│   │   ├── use-presence.ts    # Presence tracking
+│   │   └── use-inventory.ts   # Inventory CRUD + optimistic updates
+│   ├── lib/
+│   │   ├── constants.ts       # Config (backend URL, limits)
+│   │   ├── types.ts           # Frontend message types
+│   │   └── utils.ts           # cn() utility
+│   ├── package.json
+│   └── tailwind.config.ts
+├── package.json                # Monorepo scripts
+└── README.md
+```
+
+## Testing
 
 ```bash
-npx tsx demo-frontend.ts
+# Run all tests (backend + frontend)
+npm test
+
+# Backend only (268 tests — unit + property-based)
+npm run test:backend
+
+# Frontend only (92 tests — unit + property + integration)
+npm run test:frontend
 ```
 
-Open `http://localhost:4567` in **multiple browser tabs**. Each tab gets a random user identity. Add, update, and remove inventory items — changes appear instantly across all tabs.
+The engine's correctness is validated by **21 property-based tests** (backend) and **12 property-based tests** (frontend) using [fast-check](https://github.com/dubzzz/fast-check).
 
 ## Configuration
 
@@ -82,64 +112,33 @@ Environment variables (all optional):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | 8080 | Server port |
+| `PORT` | 8080 | Backend server port |
 | `JWT_SECRET` | development-secret | JWT signing secret |
 | `MAX_CONNECTIONS_PER_SESSION` | 50 | Max concurrent WebSocket connections |
-| `HEARTBEAT_INTERVAL_MS` | 30000 | Ping interval (≤30s) |
+| `HEARTBEAT_INTERVAL_MS` | 30000 | Ping interval |
 | `HEARTBEAT_TIMEOUT_MS` | 10000 | Pong timeout before disconnect |
-| `SNAPSHOT_INTERVAL_MS` | 600000 | State snapshot interval (≤10min) |
 | `DATABASE_URL` | — | PostgreSQL connection string (in-memory if not set) |
 | `REDIS_URL` | — | Redis connection string (in-memory if not set) |
-
-## Project Structure
-
-```
-src/
-├── types/          # TypeScript interfaces (CRDTState, operations, etc.)
-├── engine/         # CRDT merge logic, HLC, validation, delta, sync coordinator
-├── connection/     # WebSocket server, auth, heartbeat, presence, routing
-├── persistence/    # PostgreSQL ops log, Redis cache, snapshots
-├── client/         # Client SDK (local replica, queue, serialization)
-└── index.ts        # Server entry point
-```
-
-## CRDT Properties (Verified by Property-Based Tests)
-
-The engine's correctness is validated by 21 property-based tests using [fast-check](https://github.com/dubzzz/fast-check):
-
-| # | Property | What it proves |
-|---|----------|---------------|
-| 1 | Merge Commutativity | Order of operations doesn't matter |
-| 2 | Merge Associativity | Grouping of operations doesn't matter |
-| 3 | Merge Idempotence | Duplicate operations have no effect |
-| 4 | Deterministic Conflict Resolution | Same inputs always produce same winner |
-| 5 | Invalid Operation Rejection | Bad ops never corrupt state |
-| 6 | Queue Order Preservation | Offline ops maintain generation order |
-| 7 | Queue Persistence Round-Trip | Persisted queue restores identically |
-| 8 | Offline Queue Capacity | Holds 10,000 ops without loss |
-| 9 | ACK-Based Queue Removal | Only acknowledged ops are removed |
-| 10 | Reconnection Transmission Cap | Max 1000 ops sent on reconnect |
-| 11 | Partial Batch Merge | Valid ops merge, invalid skip |
-| 12 | Delta Broadcast Minimality | Only changed fields are broadcast |
-| 13 | Missed Update Queue Integrity | Queued deltas preserve order |
-| 14 | State Recovery via Replay | Snapshot + replay = full replay |
-| 15 | Remove Wins Over Concurrent Update | Remove always wins |
-| 16 | Inventory Item Validation | Name/quantity constraints enforced |
-| 17 | Serialization Round-Trip | Serialize→deserialize is lossless |
-| 18 | Incoming Operation Application | Remote ops update state correctly |
-| 19 | API Translation Correctness | SDK produces valid operations |
-| 20 | Presence Data Integrity | Presence list is accurate |
-| 21 | Authentication Error Classification | Token errors are typed correctly |
+| `NEXT_PUBLIC_BACKEND_URL` | http://localhost:8080 | Frontend → backend HTTP URL |
+| `NEXT_PUBLIC_WS_URL` | ws://localhost:8080 | Frontend → backend WebSocket URL |
 
 ## Tech Stack
 
-- **Runtime**: Node.js + TypeScript (ES2022, Node16 modules)
-- **WebSocket**: `ws`
-- **Auth**: `jsonwebtoken` (JWT)
-- **Database**: PostgreSQL via `pg` (with in-memory fallback)
-- **Cache**: Redis via `ioredis` (with in-memory fallback)
-- **Testing**: Vitest + fast-check (property-based testing)
-- **UUID**: `uuid` (v4)
+**Backend:**
+- Node.js + TypeScript
+- WebSocket (`ws`)
+- JWT authentication (`jsonwebtoken`)
+- PostgreSQL (`pg`) with in-memory fallback
+- Redis (`ioredis`) with in-memory fallback
+- Vitest + fast-check
+
+**Frontend:**
+- Next.js 14 (App Router)
+- React 18 + TypeScript
+- Tailwind CSS (dark-first theme)
+- Framer Motion (animations)
+- Lucide React (icons)
+- Vitest + React Testing Library + fast-check
 
 ## License
 

@@ -1,36 +1,23 @@
 {
   "name": "collaborative-sync-engine",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "private": true,
   "description": "A distributed collaborative sync engine using CRDTs for real-time multiplayer collaboration",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "test": "vitest --run",
-    "start": "node dist/index.js"
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run build && npm start",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
   },
-  "keywords": [
-    "crdt",
-    "sync",
-    "collaborative",
-    "real-time",
-    "websocket"
-  ],
+  "keywords": ["crdt", "sync", "collaborative", "real-time", "websocket", "next.js"],
   "license": "MIT",
-  "dependencies": {
-    "ioredis": "^5.6.0",
-    "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1",
-    "uuid": "^11.1.0",
-    "ws": "^8.18.0"
-  },
   "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.9",
-    "@types/pg": "^8.11.11",
-    "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.5.13",
-    "fast-check": "^3.23.2",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "concurrently": "^9.1.0"
   }
 }
