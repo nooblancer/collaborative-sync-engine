@@ -135,13 +135,26 @@ export default function MetricsDashboard() {
         />
       </div>
 
+      {/* Description + Learn More */}
+      <div className="flex items-center gap-3">
+        <p className="text-foreground-muted text-sm">
+          Live metrics from all active sessions — ops/sec, latency percentiles, and connection counts.
+        </p>
+        <a
+          href="#architecture"
+          className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors shrink-0"
+        >
+          Learn More →
+        </a>
+      </div>
+
       {/* Primary Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
         {/* Ops/sec */}
         <GlassCard variant="subtle" padding="sm" className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Zap className="h-3 w-3 text-accent" />
-            <span className="text-xs text-foreground-muted">Ops/sec</span>
+            <span className="text-xs text-foreground-muted whitespace-nowrap">Ops/sec</span>
           </div>
           <MetricCounter
             value={opsPerSecond}
@@ -154,7 +167,7 @@ export default function MetricsDashboard() {
         <GlassCard variant="subtle" padding="sm" className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Timer className="h-3 w-3 text-foreground-muted" />
-            <span className="text-xs text-foreground-muted">P50</span>
+            <span className="text-xs text-foreground-muted whitespace-nowrap">P50</span>
           </div>
           <div
             className={cn(
@@ -171,7 +184,7 @@ export default function MetricsDashboard() {
         <GlassCard variant="subtle" padding="sm" className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Timer className="h-3 w-3 text-foreground-muted" />
-            <span className="text-xs text-foreground-muted">P99</span>
+            <span className="text-xs text-foreground-muted whitespace-nowrap">P99</span>
           </div>
           <div
             className={cn(
@@ -188,7 +201,7 @@ export default function MetricsDashboard() {
         <GlassCard variant="subtle" padding="sm" className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Users className="h-3 w-3 text-foreground-muted" />
-            <span className="text-xs text-foreground-muted">Connections</span>
+            <span className="text-xs text-foreground-muted whitespace-nowrap">Conns</span>
           </div>
           <MetricCounter
             value={activeConnections}
@@ -201,7 +214,7 @@ export default function MetricsDashboard() {
         <GlassCard variant="subtle" padding="sm" className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Layers className="h-3 w-3 text-foreground-muted" />
-            <span className="text-xs text-foreground-muted">Rooms</span>
+            <span className="text-xs text-foreground-muted whitespace-nowrap">Rooms</span>
           </div>
           <MetricCounter
             value={activeRooms}
@@ -214,7 +227,7 @@ export default function MetricsDashboard() {
         <GlassCard variant="subtle" padding="sm" className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Activity className="h-3 w-3 text-foreground-muted" />
-            <span className="text-xs text-foreground-muted">Total Ops</span>
+            <span className="text-xs text-foreground-muted whitespace-nowrap">Total</span>
           </div>
           <MetricCounter
             value={totalOps}

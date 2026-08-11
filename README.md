@@ -1,6 +1,8 @@
 # Convergence — Real-Time Collaborative Sync Engine
 
-A portfolio-grade distributed real-time collaboration engine using **CRDTs** (Conflict-free Replicated Data Types) with a native **Rust merge addon** (napi-rs) targeting **50,000 ops/sec**. Full-stack monorepo with a Node.js/TypeScript backend and a Next.js 14 frontend showcasing interactive demos.
+A production-grade distributed real-time collaboration engine using **CRDTs** (Conflict-free Replicated Data Types) with a native **Rust merge addon** (napi-rs) targeting **50,000 ops/sec**. Full-stack monorepo with a Node.js/TypeScript backend and a Next.js 14 frontend showcasing interactive demos.
+
+> **Live:** [localhost:3000](http://localhost:3000) | **Blog:** [/blog](/blog) | **Repo:** [github.com/nooblancer/collaborative-sync-engine](https://github.com/nooblancer/collaborative-sync-engine)
 
 ## What It Does
 
@@ -21,12 +23,13 @@ Multiple users can simultaneously edit shared state with perfect consistency. Th
 
 ### Interactive Demos (Landing Page)
 
-- **Stress Test** — Flood the engine with 100-5000 operations, watch live throughput/latency
-- **Split-Screen Sync** — Two independent panels syncing through the backend
-- **Collaborative Whiteboard** — Draw shapes with remote cursors and CRDT sync
-- **Conflict Visualizer** — See competing operations, HLC timestamps, and resolution logic
-- **Live Metrics Dashboard** — Real-time ops/sec, P50/P99, connection counts
-- **Architecture Diagram** — Interactive node-and-edge diagram with hover tooltips
+- **Stress Test** — Flood the engine with 100-5000 operations in burst mode, watch live throughput/latency/convergence
+- **Split-Screen Sync** — Two independent panels with batch add (1-100 cards), remove all, bidirectional sync
+- **Collaborative Whiteboard** — Draw shapes with dual bot collaborators (BotAlice + BotBob), start/stop toggles, clear board
+- **Live Metrics** — Simulated real-time ops/sec, P50/P99, connection counts, 60s throughput chart
+- **Conflict Resolution** — Simulated LWW conflict events with competing clients and resolution reasons
+- **Architecture Diagram** — CSS flexbox layout with hover tooltips on nodes and edges
+- **Blog** — Full build log at `/blog` documenting the project from kickoff to V3 roadmap
 
 ## Architecture
 

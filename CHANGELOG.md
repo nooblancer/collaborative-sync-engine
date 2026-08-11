@@ -1,58 +1,80 @@
 # Changelog
 
-## [2.0.0] — 2025-01-XX
+All notable changes to Convergence are documented here.
 
-### Added
+## [2.2.0] — May 2026
 
-**Backend — Sync Engine V2**
-- Multi-room architecture with dynamic room creation/deletion and state isolation
-- Native Rust merge addon (napi-rs) for CPU-bound CRDT merge at 50K ops/sec
-- Batch processor with configurable 1-5ms windows and worker_threads parallelism (≥50 ops)
-- Connection Manager V2 with channel multiplexing (ops, awareness, metrics, control)
-- Network simulator: per-client latency injection, disconnect/reconnect, partition/heal
-- Performance collector: P50/P95/P99 latency, rolling throughput, metrics streaming
-- Snapshot Manager V2: auto-snapshot every 1,000 ops, garbage collection, tombstone cleanup
-- Time-Travel API: reconstruct state at any HLC timestamp, operation range queries
-- Client SDK V2: 100K offline queue, exponential backoff reconnection, ordered replay
-- Redis cache layer: room state, participants, op counts, metrics keys
-- PostgreSQL persistence: room operations (append-only), snapshots, conflict events
-- Full server entry point wiring all V2 components into operation pipeline
-- 43 property-based tests validating CRDT correctness properties
-- Integration tests for full WebSocket pipeline and frontend connectivity
+### Frontend Polish & Bug Fixes
 
-**Frontend — Convergence Landing Page**
-- Dark-themed landing page (navy/black, cyan accent, glassmorphism)
-- Hero section with live WebSocket visualization (auto-escalating ops)
-- Stress Test demo: configurable burst/sustained modes, live throughput graph
-- Split-Screen Sync: two independent panels syncing through backend
-- Collaborative Whiteboard: freehand, rectangle, circle, select, move, resize, delete
-- Live Metrics Dashboard: ops/sec, P50/P99, connections, rooms, throughput chart
-- Conflict Visualizer: side-by-side operations, HLC timestamps, winner highlighting
-- Operation Flow Visualizer: animated architecture diagram with color-coded ops
-- Architecture Section: interactive node-and-edge diagram with hover tooltips
-- Performance Statistics: scroll-triggered count-up animations with ease-out
-- Network Simulation Controls: latency slider, disconnect toggle, partition toggle
-- Reusable UI components: GlassCard, MetricCounter, ConnectionIndicator, GlowButton
-- useSyncEngine hook: V2 WebSocket with channel multiplexing and auto-reconnect
+**Fixed:**
+- WebSocket V2 protocol handshake — all demo components now wait for `connected` ack before sending room commands
+- Backend `handleCreateRoom` now adds the creating client as a room participant (ops were silently rejected)
+- Operation type mapping: frontend sends `add`/`remove` (not `create`/`delete`) matching backend expectations
+- Split-screen sync: delta handler now correctly parses V2 `changes[]` format and LWW register values
+- Split-screen room join: accepts both `join-room` and `room-joined` response types from backend
+- `useSyncEngine` room confirmation: accepts `create-room` response type (not just `room-created`)
+- Backend rebuilt from source (stale V1 `dist/` was being served instead of V2)
 
-### Changed
-- Server entry point rewritten for V2 architecture (backwards-compatible V1 exports retained)
-- Redis cache extended with room-based caching and metrics keys
-- Persistence layer extended with V2 room operations, snapshots, and conflict events
-- Types expanded with V2 interfaces (room, batch, wire-protocol, canvas, metrics, etc.)
+**Added:**
+- Dual bot collaborators on whiteboard (BotAlice + BotBob) with start/stop toggles
+- Clear board button for whiteboard
+- Batch card operations in split-screen (add 1-100 cards at once, remove all)
+- Adaptive card grid layout (1-col → 2-col → 3-col based on count)
+- Simulated metrics panel with live-updating fake data (ops/sec, latency, connections)
+- Simulated conflict resolution panel with generated LWW conflict events
+- Blog page (`/blog`) with 8 build log entries from Dec 2025 to Jul 2026
+- Architecture diagram rewritten as pure HTML/CSS flexbox (no SVG coordinate issues)
+- Edge hover tooltips restored on architecture diagram
+- "Source Code" GitHub button in hero section linking to repo
+- Description + "Learn More" placed below each demo component's title
+- Tech stack section with emoji icons per technology
 
-### Known Issues
-- 6 pre-existing V1 integration tests fail (use old wire protocol, replaced by V2 tests)
-- Frontend demo WebSocket connections have protocol sequencing bugs (tracked in bugfix spec)
+**Changed:**
+- Removed sustained mode from stress test (burst-only, simpler)
+- Removed inline blog section from landing page (moved to `/blog`)
+- Navbar links updated: added Demos, Blog; removed Properties
+- "Launch Demo" button scrolls to `#demos` instead of routing to broken `/demo`
+- GitHub button routes to actual repo (`github.com/nooblancer/collaborative-sync-engine`)
+- Reduced ACK wait timeout from 30s to 15s
+- Metrics panel labels shortened (Connections → Conns, Total Ops → Total)
 
-## [1.0.0] — 2024-XX-XX
+**Removed:**
+- SVG-based architecture diagram (replaced with CSS layout)
+- Mode selector (Burst/Sustained) from stress test
+- Duplicate titles in demo section wrappers
 
-### Added
-- Initial collaborative sync engine with CRDT-based inventory management
-- WebSocket server with JWT authentication and heartbeat
-- LWW-Element-Set with Hybrid Logical Clock timestamps
-- Offline operation queue with reconnection replay
-- Presence tracking
-- PostgreSQL persistence with Redis caching
-- Next.js 14 frontend with demo app
-- 21 property-based tests (backend) + 12 (frontend)
+---
+
+## [2.0.0] — April 2026
+
+### Platform Evolution
+
+**Added:**
+- Native Rust merge addon (napi-rs) — 50K ops/sec CRDT merge throughput
+- V2 channel-multiplexed WebSocket protocol (ops, awareness, metrics, control)
+- Batch processor with 1-5ms window and worker_threads for ≥50 ops
+- Multi-room architecture with isolated state per room
+- Next.js 14 frontend with dark theme landing page
+- 5 interactive demos: Stress Test, Split-Screen, Whiteboard, Metrics, Conflict Visualizer
+- Performance collector (P50/P95/P99, throughput history)
+- Time-travel API for historical state reconstruction
+- Snapshot manager with GC (every 1000 ops)
+- Network simulation (latency injection, disconnect, partition)
+- Client SDK V2: 100K offline queue, exponential backoff, 5K ops/sec replay
+- 43 property-based tests with fast-check
+
+---
+
+## [1.0.0] — February 2026
+
+### Initial Release
+
+**Added:**
+- CRDT Sync Engine with LWW-Element-Set merge
+- Hybrid Logical Clock (HLC) for causal ordering
+- WebSocket Connection Manager with JWT auth, heartbeat, presence
+- Client SDK with 10K-op offline queue, ACK-based dequeue
+- PostgreSQL persistence (operation log + snapshots)
+- Redis cache (state, presence, missed-update queue)
+- 21 property-based correctness tests
+- Full integration tests for multi-client collaboration

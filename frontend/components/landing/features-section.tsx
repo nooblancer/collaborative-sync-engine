@@ -9,21 +9,25 @@ const features = [
     title: "Real-Time Sync",
     description: "Sub-200ms propagation across all connected clients",
     icon: Zap,
+    href: "#stress-test",
   },
   {
     title: "Offline Support",
     description: "Queue up to 10,000 operations while disconnected",
     icon: WifiOff,
+    href: "#split-screen",
   },
   {
     title: "Conflict Resolution",
     description: "LWW with HLC timestamps for deterministic merges",
     icon: GitMerge,
+    href: "#conflict-visualizer",
   },
   {
     title: "Presence Tracking",
     description: "See who's online and collaborating in real-time",
     icon: Users,
+    href: "#whiteboard",
   },
 ];
 
@@ -44,13 +48,18 @@ export default function FeaturesSection() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {features.map((feature, index) => (
             <AnimateOnScroll key={feature.title} delay={index * 0.1}>
-              <Card className="h-full transition-all duration-200 hover:border-primary/50 hover:shadow-md">
-                <CardHeader>
-                  <feature.icon className="h-8 w-8 text-primary mb-2" />
-                  <CardTitle className="text-lg">{feature.title}</CardTitle>
-                  <CardDescription>{feature.description}</CardDescription>
-                </CardHeader>
-              </Card>
+              <a
+                href={feature.href}
+                className="block h-full"
+              >
+                <Card className="h-full transition-all duration-200 hover:border-primary/50 hover:shadow-md">
+                  <CardHeader>
+                    <feature.icon className="h-8 w-8 text-primary mb-2" />
+                    <CardTitle className="text-lg">{feature.title}</CardTitle>
+                    <CardDescription>{feature.description}</CardDescription>
+                  </CardHeader>
+                </Card>
+              </a>
             </AnimateOnScroll>
           ))}
         </div>

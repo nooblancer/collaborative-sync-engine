@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 const sectionLinks = [
   { href: "#architecture", label: "Architecture" },
   { href: "#features", label: "Features" },
-  { href: "#properties", label: "Properties" },
+  { href: "#demos", label: "Demos" },
   { href: "#tech-stack", label: "Tech Stack" },
+  { href: "/blog", label: "Blog" },
 ];
 
 export default function Navbar() {
@@ -14,7 +15,7 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="text-lg font-semibold text-foreground">
-          Collaborative Sync Engine
+          Convergence
         </Link>
 
         <div className="hidden md:flex items-center gap-6">
@@ -31,7 +32,7 @@ export default function Navbar() {
 
         <div className="flex items-center gap-3">
           <a
-            href="https://github.com"
+            href="https://github.com/nooblancer/collaborative-sync-engine"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub repository"
@@ -39,7 +40,7 @@ export default function Navbar() {
           >
             <Github className="h-5 w-5" />
           </a>
-          <Link href="/demo">
+          <Link href="#demos">
             <Button size="sm">Launch Demo</Button>
           </Link>
         </div>

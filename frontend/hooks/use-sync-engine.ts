@@ -134,30 +134,14 @@ export function useSyncEngine(): UseSyncEngineReturn {
         const ws = new WebSocket(`${SYNC_URL}?token=${token}`);
         wsRef.current = ws;
 
+        // Track protocol handshake state
+        let receivedConnectedAck = false;
+        let roomConfirmed = false;
+
         ws.onopen = () => {
           if (!mountedRef.current) return;
-          setConnectionState("connected");
+          // Do NOT send commands here — wait for the server's "connected" ack
           reconnectAttemptRef.current = 0;
-
-          // Join the hero demo room
-          seqRef.current += 1;
-          const joinFrame: ClientFrame = {
-            channel: "control",
-            roomId: "hero-demo",
-            seq: seqRef.current,
-            payload: { type: "create-room" },
-          };
-          ws.send(JSON.stringify(joinFrame));
-
-          // Subscribe to metrics
-          seqRef.current += 1;
-          const metricsFrame: ClientFrame = {
-            channel: "control",
-            roomId: "hero-demo",
-            seq: seqRef.current,
-            payload: { type: "subscribe-metrics" },
-          };
-          ws.send(JSON.stringify(metricsFrame));
         };
 
         ws.onmessage = (event) => {
@@ -168,6 +152,54 @@ export function useSyncEngine(): UseSyncEngineReturn {
             frame = JSON.parse(event.data);
           } catch {
             return;
+          }
+
+          // V2 Protocol sequencing:
+          // 1. Wait for connected ack → send create-room
+          // 2. Wait for create-room response → send subscribe-metrics
+          if (
+            frame.channel === "control" &&
+            frame.type === "control-response"
+          ) {
+            const payload = frame.payload as Record<string, unknown> | null;
+
+            // Step 1: Server confirms connection — now safe to create room
+            if (!receivedConnectedAck && payload && payload.type === "connected") {
+              receivedConnectedAck = true;
+              setConnectionState("connected");
+
+              // Send create-room now that server has acknowledged connection
+              seqRef.current += 1;
+              const joinFrame: ClientFrame = {
+                channel: "control",
+                roomId: "hero-demo",
+                seq: seqRef.current,
+                payload: { type: "create-room" },
+              };
+              ws.send(JSON.stringify(joinFrame));
+              return;
+            }
+
+            // Step 2: Server confirms room creation — now safe to subscribe metrics
+            if (
+              receivedConnectedAck &&
+              !roomConfirmed &&
+              payload &&
+              (payload.type === "create-room" || payload.type === "room-created" || payload.type === "room-joined" || payload.type === "join-room")
+            ) {
+              roomConfirmed = true;
+
+              // Subscribe to metrics now that room is confirmed
+              seqRef.current += 1;
+              const metricsFrame: ClientFrame = {
+                channel: "control",
+                roomId: "hero-demo",
+                seq: seqRef.current,
+                payload: { type: "subscribe-metrics" },
+              };
+              ws.send(JSON.stringify(metricsFrame));
+              return;
+            }
           }
 
           // Dispatch to channel subscribers

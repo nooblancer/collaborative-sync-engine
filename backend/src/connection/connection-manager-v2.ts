@@ -495,7 +495,24 @@ export class ConnectionManagerV2 {
    * Handle create-room command: create via SyncEngine, return room ID.
    */
   private handleCreateRoom(client: TrackedConnectionV2, frame: ClientFrame): void {
-    const room = this.syncEngine.createRoom();
+    // Use the client's requested roomId, or let the engine generate one
+    const requestedRoomId = frame.roomId || undefined;
+    const room = this.syncEngine.createRoom(requestedRoomId);
+
+    // Add the client to the newly created room
+    const participant: RoomParticipant = {
+      clientId: client.clientId,
+      userId: client.userId,
+      displayName: client.displayName,
+      joinedAt: Date.now(),
+    };
+    room.participants.set(client.clientId, participant);
+    client.rooms.add(room.id);
+
+    if (!this.roomClients.has(room.id)) {
+      this.roomClients.set(room.id, new Set());
+    }
+    this.roomClients.get(room.id)!.add(client.clientId);
 
     this.sendControlResponse(client, room.id, {
       type: "create-room",

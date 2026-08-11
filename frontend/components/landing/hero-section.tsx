@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Activity, Zap, CheckCircle2, ArrowRight } from "lucide-react";
+import { Activity, Zap, CheckCircle2, ArrowRight, Github, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GlowButton } from "@/components/ui/glow-button";
@@ -459,9 +459,11 @@ export default function HeroSection() {
                   <ArrowRight className="w-4 h-4" />
                 </GlowButton>
               </Link>
-              <a href="#architecture">
+              <a href="https://github.com/nooblancer/collaborative-sync-engine" target="_blank" rel="noopener noreferrer">
                 <GlowButton variant="secondary" size="lg">
-                  View Architecture
+                  <Github className="w-4 h-4" />
+                  Source Code
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </GlowButton>
               </a>
             </motion.div>

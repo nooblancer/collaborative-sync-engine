@@ -87,6 +87,176 @@ function getSessionIdentity(): { userId: string; displayName: string; color: str
   return identity;
 }
 
+// --- Simulated Collaborator (Bot) ---
+
+interface BotConfig {
+  name: string;
+  color: string;
+  clientId: string;
+  enabled: boolean;
+}
+
+const BOT_CONFIGS: BotConfig[] = [
+  { name: "BotAlice", color: "#ff00ff", clientId: "bot-alice-simulated", enabled: true },
+  { name: "BotBob", color: "#00ff88", clientId: "bot-bob-simulated", enabled: false },
+];
+
+const BOT_ACTIVATION_DELAY_MS = 2500;
+const BOT_MIN_INTERVAL_MS = 1000;
+const BOT_MAX_INTERVAL_MS = 3000;
+
+interface BotTarget {
+  x: number;
+  y: number;
+}
+
+/**
+ * Hook that runs a single simulated bot collaborator.
+ * Can be started/stopped via the `enabled` parameter.
+ */
+function useBot(
+  config: BotConfig,
+  enabled: boolean,
+  canvasWidth: number,
+  canvasHeight: number,
+  setRemoteCursors: React.Dispatch<React.SetStateAction<Map<string, RemoteCursor>>>,
+  setObjects: React.Dispatch<React.SetStateAction<CanvasObject[]>>
+) {
+  useEffect(() => {
+    if (!enabled) {
+      // Remove cursor when disabled
+      setRemoteCursors(prev => {
+        const next = new Map(prev);
+        next.delete(config.clientId);
+        return next;
+      });
+      return;
+    }
+
+    let mounted = true;
+    let activationTimeout: ReturnType<typeof setTimeout> | null = null;
+    let drawTimeout: ReturnType<typeof setTimeout> | null = null;
+    let cursorAnimFrame: number | null = null;
+
+    let cursorX = canvasWidth * (config.clientId.includes("alice") ? 0.6 : 0.3);
+    let cursorY = canvasHeight * (config.clientId.includes("alice") ? 0.4 : 0.6);
+    let targetX = cursorX;
+    let targetY = cursorY;
+
+    const margin = 60;
+
+    function randomInRange(min: number, max: number) {
+      return min + Math.random() * (max - min);
+    }
+
+    function randomPosition(): BotTarget {
+      return {
+        x: randomInRange(margin, canvasWidth - margin),
+        y: randomInRange(margin, canvasHeight - margin),
+      };
+    }
+
+    function updateCursor() {
+      if (!mounted) return;
+      const speed = 0.05;
+      cursorX += (targetX - cursorX) * speed;
+      cursorY += (targetY - cursorY) * speed;
+
+      setRemoteCursors(prev => {
+        const next = new Map(prev);
+        next.set(config.clientId, {
+          clientId: config.clientId,
+          displayName: config.name,
+          color: config.color,
+          x: cursorX,
+          y: cursorY,
+          lastUpdate: Date.now(),
+        });
+        return next;
+      });
+
+      cursorAnimFrame = requestAnimationFrame(updateCursor);
+    }
+
+    function drawRandomShape() {
+      if (!mounted) return;
+
+      const pos = randomPosition();
+      targetX = pos.x;
+      targetY = pos.y;
+
+      setTimeout(() => {
+        if (!mounted) return;
+
+        const shapeType = Math.random();
+        const id = `${config.clientId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+        const hlc: HLCTimestamp = { wallTime: Date.now(), logical: 0, nodeId: config.clientId };
+        const botStyle = { fill: `${config.color}14`, stroke: config.color, strokeWidth: 2 };
+
+        let newObj: CanvasObject;
+
+        if (shapeType < 0.33) {
+          const radius = randomInRange(20, 50);
+          newObj = {
+            id, type: "circle",
+            position: { x: pos.x - radius, y: pos.y - radius },
+            radius, style: botStyle,
+            createdBy: config.clientId, createdAt: hlc,
+          };
+        } else if (shapeType < 0.66) {
+          const w = randomInRange(40, 120);
+          const h = randomInRange(30, 90);
+          newObj = {
+            id, type: "rectangle",
+            position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+            dimensions: { width: w, height: h }, style: botStyle,
+            createdBy: config.clientId, createdAt: hlc,
+          };
+        } else {
+          const numPoints = Math.floor(randomInRange(3, 6));
+          const points: Array<{ x: number; y: number }> = [];
+          let px = pos.x;
+          let py = pos.y;
+          for (let i = 0; i < numPoints; i++) {
+            points.push({ x: px, y: py });
+            px += randomInRange(-40, 40);
+            py += randomInRange(-30, 30);
+          }
+          newObj = {
+            id, type: "freehand",
+            position: { x: 0, y: 0 }, points,
+            style: { ...botStyle, fill: "transparent" },
+            createdBy: config.clientId, createdAt: hlc,
+          };
+        }
+
+        setObjects(prev => [...prev, newObj]);
+      }, 600);
+
+      const nextInterval = randomInRange(BOT_MIN_INTERVAL_MS, BOT_MAX_INTERVAL_MS);
+      drawTimeout = setTimeout(drawRandomShape, nextInterval);
+    }
+
+    activationTimeout = setTimeout(() => {
+      if (!mounted) return;
+      cursorAnimFrame = requestAnimationFrame(updateCursor);
+      drawRandomShape();
+    }, BOT_ACTIVATION_DELAY_MS);
+
+    return () => {
+      mounted = false;
+      if (activationTimeout) clearTimeout(activationTimeout);
+      if (drawTimeout) clearTimeout(drawTimeout);
+      if (cursorAnimFrame) cancelAnimationFrame(cursorAnimFrame);
+      setRemoteCursors(prev => {
+        const next = new Map(prev);
+        next.delete(config.clientId);
+        return next;
+      });
+    };
+  }, [enabled, config, canvasWidth, canvasHeight, setRemoteCursors, setObjects]);
+}
+
 // --- Main Component ---
 
 export function WhiteboardCanvas({
@@ -124,6 +294,18 @@ export function WhiteboardCanvas({
   useEffect(() => { objectsRef.current = objects; }, [objects]);
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   useEffect(() => { remoteCursorsRef.current = remoteCursors; }, [remoteCursors]);
+
+  // --- Bot collaborators ---
+  const [botAliceEnabled, setBotAliceEnabled] = useState(true);
+  const [botBobEnabled, setBotBobEnabled] = useState(true);
+
+  useBot(BOT_CONFIGS[0], botAliceEnabled, width, height, setRemoteCursors, setObjects);
+  useBot(BOT_CONFIGS[1], botBobEnabled, width, height, setRemoteCursors, setObjects);
+
+  const clearBoard = useCallback(() => {
+    setObjects([]);
+    setSelectedId(null);
+  }, []);
 
   // --- WebSocket connection ---
 
@@ -756,6 +938,45 @@ export function WhiteboardCanvas({
           ))}
         </div>
       )}
+
+      {/* Bot Controls + Clear */}
+      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-2 rounded-lg bg-background-surface/90 backdrop-blur-sm border border-border px-2 py-1.5">
+        <button
+          onClick={() => setBotAliceEnabled(prev => !prev)}
+          title={botAliceEnabled ? "Stop BotAlice" : "Start BotAlice"}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+            botAliceEnabled
+              ? "bg-[#ff00ff]/20 text-[#ff00ff]"
+              : "text-foreground-dim hover:text-foreground hover:bg-accent/5"
+          )}
+        >
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: botAliceEnabled ? "#ff00ff" : "#666" }} />
+          Alice
+        </button>
+        <button
+          onClick={() => setBotBobEnabled(prev => !prev)}
+          title={botBobEnabled ? "Stop BotBob" : "Start BotBob"}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+            botBobEnabled
+              ? "bg-[#00ff88]/20 text-[#00ff88]"
+              : "text-foreground-dim hover:text-foreground hover:bg-accent/5"
+          )}
+        >
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: botBobEnabled ? "#00ff88" : "#666" }} />
+          Bob
+        </button>
+        <div className="w-px h-5 bg-border" />
+        <button
+          onClick={clearBoard}
+          title="Clear board"
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-foreground-dim hover:text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          <Trash2 size={12} />
+          Clear
+        </button>
+      </div>
     </div>
   );
 }

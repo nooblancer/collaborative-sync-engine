@@ -1,22 +1,44 @@
 import AnimateOnScroll from "@/components/landing/animate-on-scroll";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+interface TechItem {
+  name: string;
+  icon: string; // emoji or short symbol as fallback
+}
 
 const categories = [
   {
     label: "Runtime",
-    technologies: ["Node.js", "TypeScript", "Next.js 14"],
+    technologies: [
+      { name: "Node.js", icon: "⬢" },
+      { name: "TypeScript", icon: "TS" },
+      { name: "Next.js 14", icon: "▲" },
+      { name: "Rust (napi-rs)", icon: "🦀" },
+    ],
   },
   {
     label: "Networking",
-    technologies: ["WebSocket", "JWT Authentication", "Hybrid Logical Clocks"],
+    technologies: [
+      { name: "WebSocket", icon: "⚡" },
+      { name: "JWT Auth", icon: "🔐" },
+      { name: "HLC Timestamps", icon: "🕐" },
+    ],
   },
   {
     label: "Data",
-    technologies: ["CRDT (LWW-Register)", "SQLite", "Redis"],
+    technologies: [
+      { name: "CRDT (LWW)", icon: "🔀" },
+      { name: "PostgreSQL", icon: "🐘" },
+      { name: "Redis", icon: "🔴" },
+    ],
   },
   {
     label: "Testing",
-    technologies: ["Vitest", "fast-check", "React Testing Library"],
+    technologies: [
+      { name: "Vitest", icon: "⚡" },
+      { name: "fast-check", icon: "✓" },
+      { name: "RTL", icon: "🧪" },
+    ],
   },
 ];
 
@@ -26,16 +48,13 @@ export default function TechStackSection() {
       <div className="max-w-4xl mx-auto">
         <AnimateOnScroll>
           <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold">
               Tech Stack
             </h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Built with modern, battle-tested technologies
-            </p>
           </div>
         </AnimateOnScroll>
 
-        <div className="grid gap-8 sm:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-2">
           {categories.map((category, index) => (
             <AnimateOnScroll key={category.label} delay={index * 0.1}>
               <div className="rounded-lg border border-border bg-card p-6">
@@ -44,9 +63,16 @@ export default function TechStackSection() {
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {category.technologies.map((tech) => (
-                    <Badge key={tech} variant="secondary">
-                      {tech}
-                    </Badge>
+                    <span
+                      key={tech.name}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm",
+                        "bg-background-surface border border-border text-foreground"
+                      )}
+                    >
+                      <span className="text-base leading-none">{tech.icon}</span>
+                      {tech.name}
+                    </span>
                   ))}
                 </div>
               </div>

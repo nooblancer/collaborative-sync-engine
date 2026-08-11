@@ -22,7 +22,6 @@ import { WS_URL, BACKEND_URL } from "@/lib/constants";
 // ---------------------------------------------------------------------------
 
 type OperationCount = 100 | 500 | 1000 | 5000;
-type TestMode = "burst" | "sustained";
 type TestPhase = "idle" | "running" | "completed";
 type WsStatus = "connected" | "disconnected" | "reconnecting";
 
@@ -169,7 +168,6 @@ function OperationStream({ entries }: { entries: OperationLogEntry[] }) {
 export default function StressTestDemo() {
   // Config state
   const [operationCount, setOperationCount] = useState<OperationCount>(1000);
-  const [mode, setMode] = useState<TestMode>("burst");
   const [phase, setPhase] = useState<TestPhase>("idle");
   const [wsStatus, setWsStatus] = useState<WsStatus>("disconnected");
 
@@ -239,20 +237,54 @@ export default function StressTestDemo() {
 
     return new Promise<WebSocket>((resolve, reject) => {
       ws.onopen = () => {
-        setWsStatus("connected");
-        // Create a room for the stress test
-        const roomId = `stress-room-${Date.now().toString(36)}`;
-        roomIdRef.current = roomId;
-        const createCmd = {
-          channel: "control" as const,
-          roomId,
-          seq: seqRef.current++,
-          payload: { type: "create-room" as const },
-        };
-        ws.send(JSON.stringify(createCmd));
-        // Give the server a moment to process room creation
-        setTimeout(() => resolve(ws), 100);
+        setWsStatus("reconnecting");
+        // V2 protocol: do NOT send create-room here.
+        // Wait for the server's connected acknowledgment in onmessage.
       };
+
+      ws.onmessage = (event) => {
+        try {
+          const frame = JSON.parse(event.data);
+
+          // V2 protocol step 1: Wait for connected acknowledgment
+          if (
+            frame.type === "control-response" &&
+            frame.payload &&
+            frame.payload.type === "connected"
+          ) {
+            setWsStatus("connected");
+            // Now it's safe to send create-room
+            const roomId = `stress-room-${Date.now().toString(36)}`;
+            roomIdRef.current = roomId;
+            const createCmd = {
+              channel: "control" as const,
+              roomId,
+              seq: seqRef.current++,
+              payload: { type: "create-room" as const },
+            };
+            ws.send(JSON.stringify(createCmd));
+            return;
+          }
+
+          // V2 protocol step 2: Wait for create-room confirmation
+          if (
+            frame.type === "control-response" &&
+            frame.payload &&
+            (frame.payload.type === "create-room" || frame.payload.type === "room-created" || frame.payload.roomId)
+          ) {
+            // Use the server-confirmed roomId
+            if (frame.payload.roomId) {
+              roomIdRef.current = frame.payload.roomId;
+            }
+            // Room confirmed — resolve the promise so the test can proceed
+            resolve(ws);
+            return;
+          }
+        } catch {
+          // Ignore parse errors during handshake
+        }
+      };
+
       ws.onerror = () => {
         setWsStatus("disconnected");
         reject(new Error("WebSocket connection failed"));
@@ -270,7 +302,8 @@ export default function StressTestDemo() {
   const generateOperations = useCallback((count: number) => {
     const ops: Array<{
       id: string;
-      type: "create" | "update" | "delete";
+      type: "add" | "update" | "remove";
+      displayType: "create" | "update" | "delete";
       itemId: string;
       payload: Record<string, unknown>;
     }> = [];
@@ -279,18 +312,22 @@ export default function StressTestDemo() {
 
     for (let i = 0; i < count; i++) {
       const roll = Math.random();
-      let type: "create" | "update" | "delete";
+      let type: "add" | "update" | "remove";
+      let displayType: "create" | "update" | "delete";
       let itemId: string;
 
       if (roll < 0.4 || itemIds.length === 0) {
-        type = "create";
+        type = "add";
+        displayType = "create";
         itemId = generateItemId();
         itemIds.push(itemId);
       } else if (roll < 0.85) {
         type = "update";
+        displayType = "update";
         itemId = itemIds[Math.floor(Math.random() * itemIds.length)];
       } else {
-        type = "delete";
+        type = "remove";
+        displayType = "delete";
         const idx = Math.floor(Math.random() * itemIds.length);
         itemId = itemIds[idx];
         itemIds.splice(idx, 1);
@@ -300,11 +337,12 @@ export default function StressTestDemo() {
       ops.push({
         id: generateOperationId(),
         type,
+        displayType,
         itemId,
         payload:
-          type === "create"
+          displayType === "create"
             ? { name: `Item-${i}`, quantity: Math.floor(Math.random() * 1000) }
-            : type === "update"
+            : displayType === "update"
               ? { quantity: Math.floor(Math.random() * 1000) }
               : {},
       });
@@ -444,10 +482,8 @@ export default function StressTestDemo() {
         }
       }, 100);
 
-      // Send operations based on mode
-      if (mode === "burst") {
-        // Burst: send all immediately
-        for (let i = 0; i < operations.length; i++) {
+      // Send all operations immediately (burst)
+      for (let i = 0; i < operations.length; i++) {
           if (cancelledRef.current) break;
           const op = operations[i];
           const seq = seqRef.current++;
@@ -474,7 +510,7 @@ export default function StressTestDemo() {
 
           setOperationLog((prev) => [
             ...prev.slice(-99),
-            { id: op.id, type: op.type, timestamp: Date.now(), status: "submitted" },
+            { id: op.id, type: op.displayType, timestamp: Date.now(), status: "submitted" },
           ]);
 
           // Update submitted count periodically to avoid re-render on every op
@@ -486,57 +522,11 @@ export default function StressTestDemo() {
             }));
           }
         }
-      } else {
-        // Sustained: send at ~500 ops/sec (2ms interval)
-        const interval = 2;
-        for (let i = 0; i < operations.length; i++) {
-          if (cancelledRef.current) break;
-          const op = operations[i];
-          const seq = seqRef.current++;
-          const frame = {
-            channel: "ops",
-            roomId: roomIdRef.current,
-            seq,
-            payload: {
-              id: op.id,
-              type: op.type,
-              itemId: op.itemId,
-              payload: op.payload,
-              timestamp: {
-                wallTime: Date.now(),
-                logical: i,
-                nodeId: `stress-node`,
-              },
-              version: 1,
-            },
-          };
-          pendingOpsRef.current.set(seq, performance.now());
-          ws.send(JSON.stringify(frame));
-          submittedCountRef.current++;
-
-          setOperationLog((prev) => [
-            ...prev.slice(-99),
-            { id: op.id, type: op.type, timestamp: Date.now(), status: "submitted" },
-          ]);
-
-          if (i % 10 === 0 || i === operations.length - 1) {
-            setMetrics((prev) => ({
-              ...prev,
-              submitted: submittedCountRef.current,
-              queueDepth: pendingOpsRef.current.size,
-            }));
-          }
-
-          // Await delay for sustained mode
-          await new Promise((r) => setTimeout(r, interval));
-        }
-      }
-
-      // Wait for all confirmations (timeout after 30s)
+      // Wait for all confirmations (timeout after 15s)
       const waitStart = Date.now();
       while (
-        confirmedCountRef.current < operationCount &&
-        Date.now() - waitStart < 30000 &&
+        confirmedCountRef.current < submittedCountRef.current &&
+        Date.now() - waitStart < 15000 &&
         !cancelledRef.current
       ) {
         await new Promise((r) => setTimeout(r, 50));
@@ -596,7 +586,7 @@ export default function StressTestDemo() {
       setPhase("idle");
       setWsStatus("disconnected");
     }
-  }, [operationCount, mode, connectAndCreateRoom, setupMessageHandler, generateOperations]);
+  }, [operationCount, connectAndCreateRoom, setupMessageHandler, generateOperations]);
 
   // ---------------------------------------------------------------------------
   // Stop the test
@@ -652,7 +642,7 @@ export default function StressTestDemo() {
   // ---------------------------------------------------------------------------
 
   return (
-    <section className="w-full max-w-6xl mx-auto px-4 py-12 space-y-6">
+    <section id="stress-test" className="w-full max-w-6xl mx-auto px-4 py-12 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -662,6 +652,19 @@ export default function StressTestDemo() {
           </h2>
         </div>
         <ConnectionIndicator status={wsStatus} label={wsStatus} showIcon />
+      </div>
+
+      {/* Description + Learn More */}
+      <div className="flex items-center gap-3">
+        <p className="text-foreground-muted text-sm">
+          Click Run Test to flood the engine with operations and watch real-time throughput, latency, and convergence metrics.
+        </p>
+        <a
+          href="#architecture"
+          className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors shrink-0"
+        >
+          Learn More →
+        </a>
       </div>
 
       {/* Configuration Panel */}
@@ -687,31 +690,6 @@ export default function StressTestDemo() {
                   )}
                 >
                   {formatNumber(count)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Mode Selector */}
-          <div className="space-y-1.5">
-            <label className="text-xs text-foreground-muted uppercase tracking-wide">
-              Mode
-            </label>
-            <div className="flex gap-1.5">
-              {(["burst", "sustained"] as TestMode[]).map((m) => (
-                <button
-                  key={m}
-                  disabled={phase === "running"}
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-md text-sm capitalize transition-all",
-                    mode === m
-                      ? "bg-accent/20 text-accent border border-accent/40 shadow-glow-sm"
-                      : "bg-background-surface text-foreground-muted border border-border hover:border-border-hover",
-                    phase === "running" && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  {m}
                 </button>
               ))}
             </div>

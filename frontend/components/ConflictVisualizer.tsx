@@ -279,6 +279,19 @@ export default function ConflictVisualizer({
         )}
       </div>
 
+      {/* Description + Learn More */}
+      <div className="flex items-center gap-3">
+        <p className="text-foreground-muted text-sm">
+          Watch how the CRDT engine resolves concurrent edits with LWW timestamps.
+        </p>
+        <a
+          href="#architecture"
+          className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors shrink-0"
+        >
+          Learn More →
+        </a>
+      </div>
+
       <GlassCard variant="default" padding="default">
         {displayEvents.length === 0 ? (
           /* Empty state with instructional text */

@@ -28,7 +28,7 @@ describe("Navbar", () => {
 
   it("renders the project name", () => {
     render(<Navbar />);
-    expect(screen.getByText("Collaborative Sync Engine")).toBeInTheDocument();
+    expect(screen.getByText("Convergence")).toBeInTheDocument();
   });
 
   it("renders section navigation links", () => {
