@@ -1,83 +1,58 @@
 # Changelog
 
-All notable changes to the Collaborative Sync Engine project.
-
-## [1.1.0] - 2025-08-11
+## [2.0.0] — 2025-01-XX
 
 ### Added
 
-- **Next.js 14 Frontend** — Full-featured web application replacing the embedded HTML demo
-  - Landing page with hero, architecture diagram, features, CRDT properties table, and tech stack sections
-  - Interactive demo page with real-time collaborative inventory management
-  - WebSocket hook with auto-reconnect, ping/pong, and pub/sub message routing
-  - Presence tracking hook with join/leave events and 5-second refresh
-  - Inventory hook with optimistic updates, quantity clamping, and delta merge
-  - Event log component with capacity cap (50 entries) and color-coded types
-  - Dark-first theme with muted teal/cyan accent colors
-  - Responsive layout (mobile single-column, desktop multi-column)
-  - 92 frontend tests (unit, property-based, integration)
-  - 12 property-based tests validating frontend correctness invariants
+**Backend — Sync Engine V2**
+- Multi-room architecture with dynamic room creation/deletion and state isolation
+- Native Rust merge addon (napi-rs) for CPU-bound CRDT merge at 50K ops/sec
+- Batch processor with configurable 1-5ms windows and worker_threads parallelism (≥50 ops)
+- Connection Manager V2 with channel multiplexing (ops, awareness, metrics, control)
+- Network simulator: per-client latency injection, disconnect/reconnect, partition/heal
+- Performance collector: P50/P95/P99 latency, rolling throughput, metrics streaming
+- Snapshot Manager V2: auto-snapshot every 1,000 ops, garbage collection, tombstone cleanup
+- Time-Travel API: reconstruct state at any HLC timestamp, operation range queries
+- Client SDK V2: 100K offline queue, exponential backoff reconnection, ordered replay
+- Redis cache layer: room state, participants, op counts, metrics keys
+- PostgreSQL persistence: room operations (append-only), snapshots, conflict events
+- Full server entry point wiring all V2 components into operation pipeline
+- 43 property-based tests validating CRDT correctness properties
+- Integration tests for full WebSocket pipeline and frontend connectivity
 
-- **Token Endpoint** — Backend now serves `/token` for JWT issuance
-  - Accepts userId, displayName, and sessionId as query parameters
-  - Returns a signed JWT valid for 1 hour
-  - CORS headers for cross-origin frontend access
+**Frontend — Convergence Landing Page**
+- Dark-themed landing page (navy/black, cyan accent, glassmorphism)
+- Hero section with live WebSocket visualization (auto-escalating ops)
+- Stress Test demo: configurable burst/sustained modes, live throughput graph
+- Split-Screen Sync: two independent panels syncing through backend
+- Collaborative Whiteboard: freehand, rectangle, circle, select, move, resize, delete
+- Live Metrics Dashboard: ops/sec, P50/P99, connections, rooms, throughput chart
+- Conflict Visualizer: side-by-side operations, HLC timestamps, winner highlighting
+- Operation Flow Visualizer: animated architecture diagram with color-coded ops
+- Architecture Section: interactive node-and-edge diagram with hover tooltips
+- Performance Statistics: scroll-triggered count-up animations with ease-out
+- Network Simulation Controls: latency slider, disconnect toggle, partition toggle
+- Reusable UI components: GlassCard, MetricCounter, ConnectionIndicator, GlowButton
+- useSyncEngine hook: V2 WebSocket with channel multiplexing and auto-reconnect
 
 ### Changed
+- Server entry point rewritten for V2 architecture (backwards-compatible V1 exports retained)
+- Redis cache extended with room-based caching and metrics keys
+- Persistence layer extended with V2 room operations, snapshots, and conflict events
+- Types expanded with V2 interfaces (room, batch, wire-protocol, canvas, metrics, etc.)
 
-- **Monorepo structure** — Project reorganized into `backend/` and `frontend/` directories
-  - Root `package.json` with monorepo scripts (`dev`, `build`, `test`, `install:all`)
-  - Each package has its own `package.json`, `tsconfig.json`, and test configuration
-  - Shared `.gitignore` covers both packages
+### Known Issues
+- 6 pre-existing V1 integration tests fail (use old wire protocol, replaced by V2 tests)
+- Frontend demo WebSocket connections have protocol sequencing bugs (tracked in bugfix spec)
 
-### Removed
-
-- `demo.ts` — CLI demo (superseded by the frontend demo page)
-- `demo-frontend.ts` — Embedded HTML demo (superseded by the Next.js frontend)
-- `data/` directory — Local queue replica files (development artifact)
-- `.nvmrc`, `.editorconfig` — Unnecessary config files
-
----
-
-## [1.0.0] - 2025-01-27
+## [1.0.0] — 2024-XX-XX
 
 ### Added
-
-- **CRDT Engine** — LWW-Element-Set implementation with Hybrid Logical Clock timestamps
-  - Commutative, associative, and idempotent merge operations
-  - Field-level Last-Write-Wins conflict resolution
-  - Remove-wins semantics for concurrent remove + update
-  - Deterministic tiebreaker via lexicographic replica ID comparison
-  - Delta computation for minimal broadcast payloads
-
-- **Client SDK** — Local-first architecture with offline support
-  - Local replica management with sub-100ms operation application
-  - Operation queue (10,000 capacity) with file-based persistence
-  - Reconnection transmission cap (1,000 most recent operations)
-  - ACK-based queue removal
-  - High-level API: `add()`, `remove()`, `update()` with inventory validation
-  - Operation serialization with retry logic
-  - WebSocket connection management with auto-reconnect
-
-- **Connection Manager** — WebSocket server with full lifecycle management
-  - JWT authentication (malformed/expired/unauthorized classification)
-  - Token refresh on active connections with 30-second grace period
-  - Heartbeat ping/pong with stale connection detection
-  - Presence tracking (join/leave events within 2 seconds)
-  - Maximum concurrent connection enforcement per session
-  - Missed update queuing (1,000 deltas, 24-hour TTL) with resync trigger
-
-- **Persistence Layer** — Durable storage with fast caching
-  - PostgreSQL operation log with indexed queries
-  - Redis state caching (1-hour TTL, refreshed on write)
-  - State snapshots at configurable intervals
-  - State recovery via snapshot + operation replay
-
-- **Sync Engine Coordinator** — Full operation processing pipeline
-  - Validate → merge → persist → ACK → broadcast delta
-  - Batch processing (1,000 ops in <5 seconds)
-
-- **Testing** — 268 tests across 22 test files
-  - 21 property-based tests validating CRDT mathematical properties
-  - Unit tests for all modules
-  - Integration tests with 5 concurrent WebSocket clients
+- Initial collaborative sync engine with CRDT-based inventory management
+- WebSocket server with JWT authentication and heartbeat
+- LWW-Element-Set with Hybrid Logical Clock timestamps
+- Offline operation queue with reconnection replay
+- Presence tracking
+- PostgreSQL persistence with Redis caching
+- Next.js 14 frontend with demo app
+- 21 property-based tests (backend) + 12 (frontend)

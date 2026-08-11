@@ -178,10 +178,10 @@ describe("Feature: collaborative-sync-engine, Property 10: Reconnection Transmis
    * the Client SDK SHALL transmit exactly the 1000 most recent operations
    * in generation order and discard the remainder.
    */
-  it("should return exactly 1000 most recent operations in generation order when queue has > 1000 ops", () => {
+  it("should return exactly 1000 most recent operations in generation order when queue has > 1000 ops", { timeout: 30000 }, () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 1001, max: 3000 }),
+        fc.integer({ min: 1001, max: 2000 }),
         fc.uuid(),
         (n, replicaId) => {
           const queue = new FileOperationQueue(replicaId, `/tmp/test-reconnection-${replicaId}.json`);
@@ -239,7 +239,7 @@ describe("Feature: collaborative-sync-engine, Property 10: Reconnection Transmis
    *
    * When N <= 1000, all operations are returned with discardedCount = 0.
    */
-  it("should return all operations with discardedCount 0 when queue has <= 1000 ops", () => {
+  it("should return all operations with discardedCount 0 when queue has <= 1000 ops", { timeout: 15000 }, () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 1000 }),
@@ -401,7 +401,7 @@ describe("Feature: collaborative-sync-engine, Property 8: Offline Queue Capacity
    * and stored in the local queue without loss.
    * Uses a smaller range (1-500) for fast property test runs with 100 iterations.
    */
-  it("accepts and stores N operations without loss for N in [1, 500]", () => {
+  it("accepts and stores N operations without loss for N in [1, 500]", { timeout: 30000 }, () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 500 }),

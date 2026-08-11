@@ -4,7 +4,7 @@ import HeroSection from "../hero-section";
 
 vi.mock("framer-motion", () => ({
   motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+    div: ({ children, ...props }: any) => <div data-testid="motion-div" {...props}>{children}</div>,
     h1: ({ children, ...props }: any) => <h1 {...props}>{children}</h1>,
     p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
   },
@@ -20,29 +20,63 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// Mock the sync engine hook to avoid actual WebSocket connections in tests
+vi.mock("@/hooks/use-sync-engine", () => ({
+  useSyncEngine: () => ({
+    connectionState: "disconnected",
+    metrics: null,
+    sendOperation: vi.fn(),
+    sendControl: vi.fn(),
+    subscribe: () => () => {},
+  }),
+}));
+
 describe("HeroSection", () => {
-  it("renders the gradient headline", () => {
+  it("renders the headline with performance claim", () => {
     render(<HeroSection />);
-    expect(screen.getByText("Real-Time Multiplayer")).toBeInTheDocument();
-    expect(screen.getByText("Collaboration Engine")).toBeInTheDocument();
+    expect(screen.getByText("Real-Time Sync")).toBeInTheDocument();
+    expect(screen.getByText("at 50,000 ops/sec")).toBeInTheDocument();
   });
 
   it("renders the description paragraph", () => {
     render(<HeroSection />);
     expect(
-      screen.getByText(/Real-time collaborative state synchronization powered by CRDTs/)
+      screen.getByText(/Production-grade CRDT collaboration engine/)
     ).toBeInTheDocument();
   });
 
-  it("renders three CTA buttons", () => {
+  it("renders CTA buttons", () => {
     render(<HeroSection />);
-    expect(screen.getByText("Launch Demo")).toBeInTheDocument();
-    expect(screen.getByText("GitHub")).toBeInTheDocument();
-    expect(screen.getByText("View Docs")).toBeInTheDocument();
+    expect(screen.getByText("Launch Stress Test")).toBeInTheDocument();
+    expect(screen.getByText("View Architecture")).toBeInTheDocument();
   });
 
   it("renders the version badge", () => {
     render(<HeroSection />);
-    expect(screen.getByText("Engine v1.0 • Operational")).toBeInTheDocument();
+    expect(screen.getByText(/Engine v2.0/)).toBeInTheDocument();
+  });
+
+  it("renders the live visualization canvas", () => {
+    render(<HeroSection />);
+    expect(
+      screen.getByLabelText("Live operation processing visualization")
+    ).toBeInTheDocument();
+  });
+
+  it("renders metric counters for throughput, latency, and total ops", () => {
+    render(<HeroSection />);
+    expect(screen.getByText("Throughput")).toBeInTheDocument();
+    expect(screen.getByText("P50 Latency")).toBeInTheDocument();
+    expect(screen.getByText("Total Ops")).toBeInTheDocument();
+  });
+
+  it("displays connection indicator", () => {
+    render(<HeroSection />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("shows the sync engine room identifier", () => {
+    render(<HeroSection />);
+    expect(screen.getByText("sync-engine://hero-demo")).toBeInTheDocument();
   });
 });

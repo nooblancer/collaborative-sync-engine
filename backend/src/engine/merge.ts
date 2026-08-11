@@ -67,6 +67,147 @@ export function mergeOperation(
 }
 
 /**
+ * Checks whether a field should use append-only merge semantics.
+ * The "points" field on freehand paths uses append-only: segments from
+ * different clients are concatenated rather than overwritten.
+ */
+function isAppendOnlyField(key: string): boolean {
+  return key === "points";
+}
+
+/**
+ * Represents a segment in an append-only sequence (freehand path points).
+ */
+interface AppendOnlySegment {
+  replicaId: string;
+  startIndex: number;
+  data: unknown[];
+  timestamp: HLCTimestamp;
+}
+
+/**
+ * Merges append-only field data. Instead of LWW (overwrite), segments from
+ * different clients are appended. If the same client sends new segments,
+ * they are also appended (never overwritten).
+ *
+ * The value stored in the LWWRegister for append-only fields is an object
+ * with a `segments` array following the AppendOnlySequence schema.
+ *
+ * Returns true if the field was updated (new segments added).
+ */
+function mergeAppendOnlyField(
+  mergedFields: Record<string, LWWRegister>,
+  key: string,
+  value: unknown,
+  timestamp: HLCTimestamp,
+  replicaId: string
+): boolean {
+  const existingField = mergedFields[key];
+
+  // Parse incoming value as segments or raw point array
+  const incomingSegments = parseAsSegments(value, replicaId, timestamp);
+  if (incomingSegments.length === 0) {
+    return false;
+  }
+
+  if (!existingField) {
+    // No existing data — store the incoming segments as the value
+    const newValue = { segments: incomingSegments };
+    mergedFields[key] = { value: newValue, timestamp, replicaId };
+    return true;
+  }
+
+  // Get existing segments
+  const existingValue = existingField.value as { segments?: AppendOnlySegment[] } | unknown;
+  const existingSegments: AppendOnlySegment[] =
+    existingValue && typeof existingValue === "object" && "segments" in (existingValue as object)
+      ? ((existingValue as { segments: AppendOnlySegment[] }).segments ?? [])
+      : [];
+
+  // Append new segments (deduplication by checking replicaId + startIndex + timestamp)
+  const mergedSegments = [...existingSegments];
+  let hasNewSegments = false;
+
+  for (const incoming of incomingSegments) {
+    const isDuplicate = mergedSegments.some(
+      (existing) =>
+        existing.replicaId === incoming.replicaId &&
+        existing.startIndex === incoming.startIndex &&
+        compareTimestamps(existing.timestamp, incoming.timestamp) === 0
+    );
+    if (!isDuplicate) {
+      mergedSegments.push(incoming);
+      hasNewSegments = true;
+    }
+  }
+
+  if (!hasNewSegments) {
+    return false;
+  }
+
+  // Sort segments by timestamp for deterministic ordering
+  mergedSegments.sort((a, b) => {
+    const cmp = compareTimestamps(a.timestamp, b.timestamp);
+    if (cmp !== 0) return cmp;
+    // Tie-break by replicaId for determinism
+    if (a.replicaId < b.replicaId) return -1;
+    if (a.replicaId > b.replicaId) return 1;
+    return a.startIndex - b.startIndex;
+  });
+
+  const newValue = { segments: mergedSegments };
+  // Use the max timestamp as the field timestamp
+  const maxTs = mergedSegments.reduce(
+    (max, seg) => (compareTimestamps(seg.timestamp, max) > 0 ? seg.timestamp : max),
+    mergedSegments[0].timestamp
+  );
+  mergedFields[key] = { value: newValue, timestamp: maxTs, replicaId };
+  return true;
+}
+
+/**
+ * Parses an incoming value as append-only segments.
+ * Supports both raw point arrays and pre-structured segment objects.
+ */
+function parseAsSegments(
+  value: unknown,
+  replicaId: string,
+  timestamp: HLCTimestamp
+): AppendOnlySegment[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  // Already in segments format
+  if (typeof value === "object" && "segments" in (value as object)) {
+    const segments = (value as { segments: AppendOnlySegment[] }).segments;
+    if (Array.isArray(segments)) {
+      return segments;
+    }
+  }
+
+  // Raw array of points — wrap in a single segment
+  if (Array.isArray(value)) {
+    if (value.length === 0) return [];
+    return [
+      {
+        replicaId,
+        startIndex: 0,
+        data: value,
+        timestamp,
+      },
+    ];
+  }
+
+  // Single segment object
+  if (typeof value === "object" && "data" in (value as object)) {
+    return [value as AppendOnlySegment];
+  }
+
+  return [];
+}
+
+/**
  * Merges a field from an operation payload into the existing fields map
  * using LWW semantics with deterministic tiebreaking.
  *
@@ -79,6 +220,11 @@ function mergeField(
   timestamp: HLCTimestamp,
   replicaId: string
 ): boolean {
+  // Append-only fields (e.g., freehand path "points") use different merge logic
+  if (isAppendOnlyField(key)) {
+    return mergeAppendOnlyField(mergedFields, key, value, timestamp, replicaId);
+  }
+
   const existingField = mergedFields[key];
 
   if (!existingField || compareTimestamps(timestamp, existingField.timestamp) > 0) {
@@ -189,7 +335,12 @@ function handleAdd(
   // Item doesn't exist — create it fresh
   const fields: Record<string, LWWRegister> = {};
   for (const [key, value] of Object.entries(payload)) {
-    fields[key] = { value, timestamp, replicaId };
+    if (isAppendOnlyField(key)) {
+      // Append-only fields need segment wrapping even on first creation
+      mergeAppendOnlyField(fields, key, value, timestamp, replicaId);
+    } else {
+      fields[key] = { value, timestamp, replicaId };
+    }
   }
 
   const newElement: LWWElement = {

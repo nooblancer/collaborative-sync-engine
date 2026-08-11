@@ -1,0 +1,20 @@
+{
+  "name": "@collaborative-sync-engine/native-merge",
+  "version": "0.1.0",
+  "description": "Native CRDT merge addon for the Collaborative Sync Engine (Rust/napi-rs)",
+  "main": "index.node",
+  "scripts": {
+    "build": "napi build --release",
+    "build:debug": "napi build",
+    "test": "cargo test"
+  },
+  "napi": {
+    "name": "native-merge",
+    "triples": {
+      "defaults": true
+    }
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  }
+}
