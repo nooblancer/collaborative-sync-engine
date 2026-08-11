@@ -427,7 +427,7 @@ export default function HeroSection() {
             <motion.div variants={item} className="mb-4">
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass-subtle text-xs font-mono text-accent">
                 <Activity className="w-3 h-3" />
-                Engine v2.0 — Live
+                Engine v2.2 — Live
               </span>
             </motion.div>
 
