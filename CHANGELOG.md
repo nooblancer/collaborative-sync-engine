@@ -4,7 +4,12 @@ All notable changes to Convergence are documented here.
 
 ## [2.2.0] — May 2026
 
-### Frontend Polish & Bug Fixes
+### Frontend Polish, Bug Fixes & Deployment
+
+**Deployed:**
+- Frontend: https://frontend-one-sable-24.vercel.app (Vercel, auto-deploys on push)
+- Backend: https://collaborative-sync-engine-caj8.onrender.com (Render, free tier)
+- WebSocket: wss://collaborative-sync-engine-caj8.onrender.com
 
 **Fixed:**
 - WebSocket V2 protocol handshake — all demo components now wait for `connected` ack before sending room commands

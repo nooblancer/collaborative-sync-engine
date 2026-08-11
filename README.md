@@ -2,7 +2,7 @@
 
 A production-grade distributed real-time collaboration engine using **CRDTs** (Conflict-free Replicated Data Types) with a native **Rust merge addon** (napi-rs) targeting **50,000 ops/sec**. Full-stack monorepo with a Node.js/TypeScript backend and a Next.js 14 frontend showcasing interactive demos.
 
-> **Live:** [localhost:3000](http://localhost:3000) | **Blog:** [/blog](/blog) | **Repo:** [github.com/nooblancer/collaborative-sync-engine](https://github.com/nooblancer/collaborative-sync-engine)
+> **Live:** [frontend-one-sable-24.vercel.app](https://frontend-one-sable-24.vercel.app) | **Blog:** [/blog](https://frontend-one-sable-24.vercel.app/blog) | **Backend:** [collaborative-sync-engine-caj8.onrender.com](https://collaborative-sync-engine-caj8.onrender.com) | **Repo:** [github.com/nooblancer/collaborative-sync-engine](https://github.com/nooblancer/collaborative-sync-engine)
 
 ## What It Does
 
