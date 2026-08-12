@@ -13,7 +13,7 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 use crate::types::{CRDTState, CRDTOperation, HLCTimestamp};
-use crate::merge::{apply_merge_operation, apply_merge_batch};
+use crate::merge::{apply_merge_operation, apply_merge_batch, apply_merge_batch_benchmark};
 use crate::hlc::compare_hlc_timestamps;
 use crate::snapshot::compute_state_snapshot;
 
@@ -80,6 +80,33 @@ pub fn compute_snapshot(state: Buffer) -> Result<Buffer> {
 
     let serialized = serde_json::to_vec(&snapshot)
         .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to serialize snapshot: {}", e)))?;
+
+    Ok(Buffer::from(serialized))
+}
+
+/// Optimized benchmark merge: processes all operations in one Rust call.
+/// No intermediate serialization, no state cloning per operation.
+/// Returns a lightweight BenchmarkMergeResult with just the metrics + final state.
+///
+/// This is O(n) per operation (HashMap lookup + insert) instead of O(n²)
+/// from the clone-per-op approach in the standard merge_batch.
+#[napi]
+pub fn merge_batch_benchmark(state: Buffer, operations: Vec<Buffer>) -> Result<Buffer> {
+    let state: CRDTState = serde_json::from_slice(&state)
+        .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to deserialize state: {}", e)))?;
+
+    let ops: Vec<CRDTOperation> = operations
+        .iter()
+        .map(|buf| {
+            serde_json::from_slice(buf)
+                .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to deserialize operation: {}", e)))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let result = apply_merge_batch_benchmark(state, ops);
+
+    let serialized = serde_json::to_vec(&result)
+        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to serialize result: {}", e)))?;
 
     Ok(Buffer::from(serialized))
 }

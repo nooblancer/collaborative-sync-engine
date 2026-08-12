@@ -23,3 +23,12 @@ export declare function compareHlc(a: Buffer, b: Buffer): number
  * Returns a Buffer containing the cleaned-up state.
  */
 export declare function computeSnapshot(state: Buffer): Buffer
+/**
+ * Optimized benchmark merge: processes all operations in one Rust call.
+ * No intermediate serialization, no state cloning per operation.
+ * Returns a lightweight BenchmarkMergeResult with just the metrics + final state.
+ *
+ * This is O(n) per operation (HashMap lookup + insert) instead of O(n²)
+ * from the clone-per-op approach in the standard merge_batch.
+ */
+export declare function mergeBatchBenchmark(state: Buffer, operations: Array<Buffer>): Buffer

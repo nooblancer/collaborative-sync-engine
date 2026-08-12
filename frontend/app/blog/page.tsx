@@ -18,6 +18,26 @@ interface BlogPost {
 
 const posts: BlogPost[] = [
   {
+    slug: "v2-4-2-benchmark-modes",
+    title: "V2.4.2: 5 Benchmark Modes & 170x Rust Performance Optimization",
+    description: "From 40-second timeouts to 345K ops/sec — how eliminating state.clone() and intermediate JSON serialization unlocked O(n) CRDT merge performance.",
+    content: "This release transforms the server benchmark from a single-mode throughput test into a comprehensive 5-mode analysis suite — and solves the O(n²) performance cliff that made large benchmarks timeout.\n\nThe five modes:\n• Standard — Measures raw merge throughput with independent batches (no state accumulation). Best for pure Rust merge speed.\n• Conflict Resolution — High-contention workload with ≥80% operations targeting ≤10 hot keys across 4+ replicas. Tracks conflict resolution count and final CRDT state size.\n• Concurrent Rooms — Distributes operations across N isolated rooms (default 5), each with independent CRDT state. Reports per-room metrics, fastest/slowest/average.\n• Operation Breakdown — Per-operation timing with nanosecond precision via process.hrtime.bigint(). Reports separate metrics for add, update, and remove operations.\n• Snapshot/Compaction — Runs a tombstone-heavy workload (≥20% removes), then measures computeSnapshot cost. Reports items before/after compaction and tombstones removed.\n\nThe performance problem: at 100K+ operations, the original benchmark timed out at 40 seconds. Root cause — the Rust mergeBatch function called state.clone() on every operation, making each subsequent merge process a larger state copy. Combined with full JSON.parse/JSON.stringify on every Node.js ↔ Rust boundary crossing, this produced O(n²) behavior.\n\nThe fix: a new mergeBatchBenchmark Rust function that processes all operations in a single call with zero cloning. It uses HashMap::get_mut() for in-place mutation — each operation does one hash lookup and one field write. No intermediate state copies, no JSON round-trips between batches.\n\nAdditionally, a WorkloadCache pre-generates all operation buffers at startup so the timing loop measures pure merge throughput without operation generation overhead.\n\nResults across all modes up to 1M operations:\n• Standard: 155K ops/sec sustained at 1M ops (6.5s)\n• Conflict: 345K ops/sec peak at 1M ops (2.9s) — fastest due to small final state\n• Rooms (5): 185K ops/sec at 1M ops (5.4s)\n• Snapshot: 169K ops/sec at 1M ops (5.9s)\n• Breakdown: 211K ops/sec at 1M ops (4.7s)\n\nThe conflict mode's higher throughput comes from the concentrated key space — fewer unique items means the HashMap stays small and cache-friendly. Standard mode's lower throughput reflects the broader key distribution creating a larger working set.\n\n14 property-based tests validate the new modes: workload distribution correctness, CRDT convergence under contention, room isolation, per-type metric consistency, snapshot arithmetic invariants, and input validation rejection.",
+    date: "August 2026",
+    readTime: "6 min",
+    tag: "Release",
+    status: "current",
+  },
+  {
+    slug: "v2-4-stress-test-page",
+    title: "V2.4: Dedicated Stress Test Page with Server Benchmark",
+    description: "Moving the stress test from a landing page section to a full-page experience with server-side Rust merge engine benchmarking and mode-aware presets.",
+    content: "V2.4 promotes the stress test from a compact landing page section to a dedicated /stress-test page with room to breathe. The page uses a full-width stacked layout with two primary sections: a browser-side benchmark (testing WebSocket round-trip performance) and a server-side benchmark (testing raw Rust merge throughput).\n\nThe server benchmark section sends POST requests to the /benchmark endpoint, which exercises the native Rust merge addon in a tight loop. It measures:\n• Throughput (ops/sec) — total operations divided by elapsed time\n• Latency percentiles (P50, P99) — computed from per-batch durations\n• Batch processing — configurable batch sizes with preset selectors\n• Memory measurement — MemorySampler tracks heap usage baseline, peak, and delta\n\nThe OpsPresetSelector component provides quick-select buttons for common operation counts (10K, 50K, 100K, 500K) adapted per benchmark mode. An ExplanationPanel gives context about what each benchmark measures and how to interpret results.\n\nThe page architecture separates concerns cleanly: useServerBenchmark hook manages state and API calls, ServerBenchmarkSection handles layout and UI, and the backend handles validation, dispatch, and Rust execution.\n\nProperty-based tests (fast-check) validate:\n• Response field correctness across all preset sizes\n• Percentile ordering invariants (P50 ≤ P99)\n• Input rejection for invalid parameters\n• UI state consistency during benchmark lifecycle\n\nThe /stress-test route is linked from the landing page navbar, providing a clean separation between the showcase demos and the deep-dive performance tooling.",
+    date: "August 2026",
+    readTime: "4 min",
+    tag: "Release",
+    status: "published",
+  },
+  {
     slug: "v3-roadmap",
     title: "V3 Roadmap: Individual App Pages for Each Demo",
     description: "Planning dedicated pages for Stress Test, Split-Screen, Whiteboard, Metrics, and Conflict Resolution — each with deeper controls, history, and shareable URLs.",
@@ -35,7 +55,7 @@ const posts: BlogPost[] = [
     date: "August 2026",
     readTime: "5 min",
     tag: "Release",
-    status: "current",
+    status: "published",
   },
   {
     slug: "v2-3-1-perf-patch",

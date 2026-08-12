@@ -5,10 +5,19 @@
  * without WebSocket overhead, returning detailed performance statistics
  * including throughput and percentile latencies.
  *
- * Requirements: 1.1–1.14, 1.16
+ * Extended with mode routing to dispatch to conflict, rooms, breakdown,
+ * and snapshot runners alongside the existing standard benchmark.
+ *
+ * Requirements: 1.1–1.14, 1.16, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 1.7
  */
 
 import path from "path";
+import { MemorySampler } from "./memory-sampler.js";
+import { getCachedStandardWorkload } from "./benchmark-workload-cache.js";
+import { runConflictBenchmark, type ConflictBenchmarkResponse } from "./benchmark-conflict.js";
+import { runRoomsBenchmark, type RoomsBenchmarkResponse } from "./benchmark-rooms.js";
+import { runBreakdownBenchmark, type BreakdownBenchmarkResponse } from "./benchmark-breakdown.js";
+import { runSnapshotBenchmark, type SnapshotBenchmarkResponse } from "./benchmark-snapshot.js";
 
 // Load the native merge addon (.node binary)
 // The native addon is at backend/native-merge/native-merge.node relative to backend/src/
@@ -17,10 +26,28 @@ const nativeMergePath = path.join(__dirname, "..", "native-merge", "native-merge
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const nativeMerge = require(nativeMergePath) as {
   mergeBatch: (state: Buffer, operations: Buffer[]) => Buffer;
+  mergeBatchBenchmark: (state: Buffer, operations: Buffer[]) => Buffer;
 };
 
 // ---------------------------------------------------------------------------
-// Interfaces
+// Types
+// ---------------------------------------------------------------------------
+
+/** Valid benchmark modes */
+export type BenchmarkMode = "standard" | "conflict" | "rooms" | "breakdown" | "snapshot";
+
+const VALID_MODES: BenchmarkMode[] = ["standard", "conflict", "rooms", "breakdown", "snapshot"];
+
+/** Validated parameters for dispatching to a benchmark runner */
+export interface ValidatedBenchmarkParams {
+  mode: BenchmarkMode;
+  ops: number;
+  batchSize: number;
+  rooms: number; // only used when mode === "rooms"
+}
+
+// ---------------------------------------------------------------------------
+// Interfaces (legacy, preserved for backward compatibility)
 // ---------------------------------------------------------------------------
 
 export interface BenchmarkRequest {
@@ -42,6 +69,7 @@ export interface BenchmarkResponse {
 export interface BenchmarkError {
   error: string;
   details?: string;
+  validModes?: BenchmarkMode[];
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +77,7 @@ export interface BenchmarkError {
 // ---------------------------------------------------------------------------
 
 /**
- * Validates benchmark input parameters.
+ * Validates benchmark input parameters (legacy validator, preserved for compatibility).
  * Returns a BenchmarkError if invalid, or null if valid.
  */
 export function validateBenchmarkInput(
@@ -78,6 +106,231 @@ export function validateBenchmarkInput(
   }
 
   return null;
+}
+
+/**
+ * Validates a full benchmark request body including mode and mode-specific params.
+ * Returns validated params on success, or a BenchmarkError on failure.
+ *
+ * - Defaults: mode → "standard", ops → 50000, batchSize → 1000, rooms → 5
+ * - Rejects unrecognized mode values with HTTP 400 (Requirement 7.5)
+ * - Rejects out-of-range params with HTTP 400 (Requirement 7.6, 1.7)
+ * - Validates rooms count for "rooms" mode (Requirement 7.3)
+ *
+ * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 1.7
+ */
+export function validateBenchmarkRequest(
+  body: unknown
+): { valid: true; params: ValidatedBenchmarkParams } | { valid: false; error: BenchmarkError } {
+  // Ensure body is an object
+  if (body === null || body === undefined || typeof body !== "object" || Array.isArray(body)) {
+    return {
+      valid: false,
+      error: { error: "Invalid request body", details: "Request body must be a JSON object" },
+    };
+  }
+
+  const b = body as Record<string, unknown>;
+
+  // Validate mode (Requirement 7.5)
+  let mode: BenchmarkMode = "standard"; // Default (Requirement 7.2)
+  if (b.mode !== undefined) {
+    if (typeof b.mode !== "string" || !VALID_MODES.includes(b.mode as BenchmarkMode)) {
+      return {
+        valid: false,
+        error: {
+          error: "Invalid mode",
+          details: `Unrecognized mode value. Valid modes are: ${VALID_MODES.join(", ")}`,
+          validModes: VALID_MODES,
+        },
+      };
+    }
+    mode = b.mode as BenchmarkMode;
+  }
+
+  // Validate ops (Requirement 1.7, 7.6)
+  let ops = 50000; // Default
+  if (b.ops !== undefined) {
+    ops = Number(b.ops);
+    if (!isFinite(ops) || ops < 100 || ops > 1000000) {
+      return {
+        valid: false,
+        error: {
+          error: "Invalid ops count",
+          details: "ops must be between 100 and 1000000",
+        },
+      };
+    }
+  }
+
+  // Validate batchSize (Requirement 1.7, 7.6)
+  let batchSize = 1000; // Default
+  if (b.batchSize !== undefined) {
+    batchSize = Number(b.batchSize);
+    if (!isFinite(batchSize) || batchSize < 1 || batchSize > ops) {
+      return {
+        valid: false,
+        error: {
+          error: "Invalid batch size",
+          details: `batchSize must be between 1 and ${ops}`,
+        },
+      };
+    }
+  }
+
+  // Validate rooms parameter for "rooms" mode (Requirements 7.3, 7.4)
+  let rooms = 5; // Default (Requirement 7.4)
+  if (mode === "rooms" && b.rooms !== undefined) {
+    rooms = Number(b.rooms);
+    if (!isFinite(rooms) || rooms < 2 || rooms > 50) {
+      return {
+        valid: false,
+        error: {
+          error: "Invalid rooms count",
+          details: "rooms must be between 2 and 50",
+        },
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    params: { mode, ops, batchSize, rooms },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mode Router
+// ---------------------------------------------------------------------------
+
+/** Response type for the mode router (discriminated union) */
+export type BenchmarkModeResponse =
+  | StandardBenchmarkResponse
+  | ConflictBenchmarkResponse
+  | RoomsBenchmarkResponse
+  | BreakdownBenchmarkResponse
+  | SnapshotBenchmarkResponse;
+
+/** Standard benchmark response with mode and memory fields */
+export interface StandardBenchmarkResponse {
+  mode: "standard";
+  totalOps: number;
+  elapsedMs: number;
+  opsPerSecond: number;
+  p50Ms: number;
+  p99Ms: number;
+  batchesProcessed: number;
+  mergeEngine: "rust-napi-rs";
+  timestamp: string;
+  memoryPeakMb: number | null;
+  memoryDeltaMb: number | null;
+  memoryError?: string;
+}
+
+/**
+ * Mode router: dispatches to the correct benchmark runner based on validated params.
+ *
+ * Requirements: 7.1, 7.2, 7.7
+ */
+export function handleBenchmark(params: ValidatedBenchmarkParams): BenchmarkModeResponse | BenchmarkError {
+  const { mode, ops, batchSize, rooms } = params;
+
+  switch (mode) {
+    case "standard":
+      return runStandardBenchmark(ops, batchSize);
+
+    case "conflict": {
+      const result = runConflictBenchmark(ops, batchSize);
+      if ("error" in result) {
+        return { error: result.error, details: `opsCompleted: ${result.opsCompleted ?? 0}` };
+      }
+      return result;
+    }
+
+    case "rooms": {
+      const result = runRoomsBenchmark(ops, batchSize, rooms);
+      if ("error" in result) {
+        return { error: result.error, details: `opsCompleted: ${result.opsCompleted ?? 0}` };
+      }
+      return result;
+    }
+
+    case "breakdown": {
+      const result = runBreakdownBenchmark(ops, batchSize);
+      if ("error" in result) {
+        return { error: result.error, details: result.details };
+      }
+      return result;
+    }
+
+    case "snapshot": {
+      const result = runSnapshotBenchmark(ops);
+      if ("error" in result) {
+        return { error: result.error, details: `itemsBefore: ${result.itemsBefore ?? 0}` };
+      }
+      return result;
+    }
+
+    default:
+      return {
+        error: "Invalid mode",
+        details: `Unrecognized mode value. Valid modes are: ${VALID_MODES.join(", ")}`,
+        validModes: VALID_MODES,
+      };
+  }
+}
+
+/**
+ * Runs the standard benchmark with MemorySampler wired in.
+ * Uses mergeBatchBenchmark for optimized O(n) processing.
+ */
+function runStandardBenchmark(ops: number, batchSize: number): StandardBenchmarkResponse {
+  // Get cached workload (generated once, reused across runs)
+  const allOps = getCachedStandardWorkload(ops);
+
+  // Fresh CRDT state
+  const emptyState = Buffer.from(JSON.stringify({
+    sessionId: "benchmark-session",
+    items: {},
+    version: 0,
+    lastUpdated: { wallTime: 0, logical: 0, nodeId: "benchmark-node" },
+  }));
+
+  // Wire MemorySampler
+  const memorySampler = new MemorySampler();
+  memorySampler.recordBaseline();
+
+  // Single optimized Rust call — processes all ops in-memory without cloning
+  const overallStart = process.hrtime.bigint();
+  nativeMerge.mergeBatchBenchmark(emptyState, allOps);
+  const overallEnd = process.hrtime.bigint();
+
+  memorySampler.sample();
+
+  const elapsedMs = Number(overallEnd - overallStart) / 1_000_000;
+
+  // Get memory results
+  const memoryResults = memorySampler.getResults();
+
+  const response: StandardBenchmarkResponse = {
+    mode: "standard",
+    totalOps: ops,
+    elapsedMs,
+    opsPerSecond: ops / (elapsedMs / 1000),
+    p50Ms: elapsedMs,
+    p99Ms: elapsedMs,
+    batchesProcessed: 1,
+    mergeEngine: "rust-napi-rs",
+    timestamp: new Date().toISOString(),
+    memoryPeakMb: memoryResults.memoryPeakMb,
+    memoryDeltaMb: memoryResults.memoryDeltaMb,
+  };
+
+  if (memoryResults.memoryError) {
+    response.memoryError = memoryResults.memoryError;
+  }
+
+  return response;
 }
 
 // ---------------------------------------------------------------------------

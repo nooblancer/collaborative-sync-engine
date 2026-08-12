@@ -2,6 +2,47 @@
 
 All notable changes to Convergence are documented here.
 
+## [2.4.2] — August 2026
+
+### 5 Benchmark Modes + Rust Performance Optimization
+
+**Added:**
+- 5 benchmark modes: Standard, Conflict Resolution, Concurrent Rooms, Operation Breakdown, Snapshot/Compaction
+- Mode selector UI (BenchmarkModeSelector) with radio button group and per-mode descriptions
+- Mode-specific result display components (ConflictResultsDisplay, RoomsResultsDisplay, BreakdownResultsDisplay, SnapshotResultsDisplay)
+- Per-mode operation presets (Standard: 10K–500K, Conflict/Rooms/Snapshot: 1K–50K, Breakdown: 500–10K)
+- Memory measurement via MemorySampler (peak heap, delta, error handling)
+- 14 property-based tests covering workload generation, CRDT convergence, room isolation, metric consistency, snapshot invariants, input validation
+
+**Performance:**
+- `mergeBatchBenchmark` Rust function — O(n) in-place merge via HashMap::get_mut(), zero state.clone()
+- Workload pre-generation cache (operations generated once at startup, reused across runs)
+- Fast state extraction (Buffer.indexOf + subarray instead of full JSON.parse)
+- Eliminated intermediate serialization (single Rust call processes all ops without Node.js JSON round-trips)
+- Peak throughput: 345K ops/sec (Conflict mode, 1M operations in 2.9 seconds)
+
+**Changed:**
+- Server benchmark uses single optimized Rust call instead of per-batch mergeBatch with state accumulation
+- Operation presets adapt per mode (accumulating modes use smaller counts due to state growth)
+- Backend POST /benchmark handler uses mode router with validateBenchmarkRequest + handleBenchmark
+
+---
+
+## [2.4.0] — August 2026
+
+### Dedicated Stress Test Page
+
+**Added:**
+- /stress-test dedicated page with full-width stacked layout
+- ServerBenchmarkSection — POST /benchmark with configurable ops, latency percentiles, memory measurement
+- BrowserBenchmarkSection — WebSocket round-trip performance testing
+- OpsPresetSelector — Quick-select buttons for common operation counts
+- ExplanationPanel — Context about benchmark methodology and interpretation
+- Server benchmark property tests (response correctness, percentile ordering, input validation)
+- Full-width card layout for benchmark sections
+
+---
+
 ## [2.2.0] — May 2026
 
 ### Frontend Polish, Bug Fixes & Deployment

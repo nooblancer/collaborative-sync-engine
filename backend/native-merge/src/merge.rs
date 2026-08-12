@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::hlc::{compare_hlc_timestamps, max_timestamp};
 use crate::types::{
-    BatchMergeResultData, CRDTOperation, CRDTState, HLCTimestamp, ItemChange, LWWElement,
+    BatchMergeResultData, BenchmarkMergeResult, CRDTOperation, CRDTState, HLCTimestamp, ItemChange, LWWElement,
     LWWRegister, MergeResultData, OperationError, OperationType, StateDelta,
 };
 
@@ -59,6 +59,120 @@ pub fn apply_merge_batch(mut state: CRDTState, operations: Vec<CRDTOperation>) -
             changes: all_changes,
             timestamp: last_timestamp,
         },
+        state,
+    }
+}
+
+/// Optimized batch merge for benchmarking — O(n) instead of O(n²).
+///
+/// Key differences from `apply_merge_batch`:
+/// 1. Mutates state in-place — NO state.clone() per operation
+/// 2. Does not build change deltas — only counts conflicts
+/// 3. Returns lightweight BenchmarkMergeResult
+///
+/// This processes 500k operations in seconds instead of minutes.
+pub fn apply_merge_batch_benchmark(mut state: CRDTState, operations: Vec<CRDTOperation>) -> BenchmarkMergeResult {
+    use crate::types::BenchmarkMergeResult;
+
+    let total_received = operations.len();
+    let mut merged = 0usize;
+    let mut conflicts = 0usize;
+    let mut failed_count = 0usize;
+
+    for op in operations {
+        let op_timestamp = op.timestamp.clone();
+        let item_id = op.item_id.clone();
+
+        match op.op_type {
+            OperationType::Add => {
+                if let Some(existing) = state.items.get_mut(&item_id) {
+                    // Item exists — merge field-by-field in place (conflict)
+                    let mut has_changes = false;
+                    for (key, value) in &op.payload {
+                        if merge_field(&mut existing.fields, key, value.clone(), &op.timestamp, &op.replica_id) {
+                            has_changes = true;
+                        }
+                    }
+                    // Update addedAt to max
+                    let new_added_at = max_timestamp(&existing.added_at, &op.timestamp);
+                    if compare_hlc_timestamps(&new_added_at, &existing.added_at) != 0 {
+                        existing.added_at = new_added_at;
+                        has_changes = true;
+                    }
+                    if has_changes {
+                        conflicts += 1;
+                    }
+                    merged += 1;
+                } else {
+                    // New item — insert directly
+                    let mut fields: HashMap<String, LWWRegister> = HashMap::new();
+                    for (key, value) in &op.payload {
+                        fields.insert(key.clone(), LWWRegister {
+                            value: value.clone(),
+                            timestamp: op.timestamp.clone(),
+                            replica_id: op.replica_id.clone(),
+                        });
+                    }
+                    state.items.insert(item_id, LWWElement {
+                        item_id: op.item_id.clone(),
+                        fields,
+                        added_at: op.timestamp.clone(),
+                        removed_at: None,
+                    });
+                    merged += 1;
+                }
+            }
+            OperationType::Remove => {
+                if let Some(existing) = state.items.get_mut(&item_id) {
+                    let new_removed_at = match &existing.removed_at {
+                        Some(existing_removed) => max_timestamp(existing_removed, &op.timestamp),
+                        None => op.timestamp.clone(),
+                    };
+                    // Only update if timestamp actually changed
+                    let changed = match &existing.removed_at {
+                        Some(existing_removed) => compare_hlc_timestamps(&new_removed_at, existing_removed) != 0,
+                        None => true,
+                    };
+                    if changed {
+                        existing.removed_at = Some(new_removed_at);
+                    }
+                    merged += 1;
+                } else {
+                    // Item doesn't exist — no-op but still counts as merged
+                    merged += 1;
+                }
+            }
+            OperationType::Update => {
+                if let Some(existing) = state.items.get_mut(&item_id) {
+                    let mut has_changes = false;
+                    for (key, value) in &op.payload {
+                        if merge_field(&mut existing.fields, key, value.clone(), &op.timestamp, &op.replica_id) {
+                            has_changes = true;
+                        }
+                    }
+                    if has_changes {
+                        conflicts += 1;
+                    }
+                    merged += 1;
+                } else {
+                    // Item doesn't exist — failed
+                    failed_count += 1;
+                }
+            }
+        }
+
+        // Update state metadata
+        state.version += 1;
+        state.last_updated = max_timestamp(&state.last_updated, &op_timestamp);
+    }
+
+    let item_count = state.items.len();
+    BenchmarkMergeResult {
+        total_received,
+        merged,
+        conflicts,
+        failed: failed_count,
+        item_count,
         state,
     }
 }

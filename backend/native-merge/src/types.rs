@@ -134,3 +134,16 @@ pub struct BatchMergeResultData {
     pub final_delta: StateDelta,
     pub state: CRDTState,
 }
+
+/// Lightweight result for benchmark-optimized batch merge.
+/// Only tracks metrics needed for benchmarking — no delta, no per-op results.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchmarkMergeResult {
+    pub total_received: usize,
+    pub merged: usize,
+    pub conflicts: usize,
+    pub failed: usize,
+    pub item_count: usize,
+    pub state: CRDTState,
+}

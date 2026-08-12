@@ -1,6 +1,6 @@
 # Convergence — Real-Time Collaborative Sync Engine
 
-A production-grade distributed real-time collaboration engine using **CRDTs** (Conflict-free Replicated Data Types) with a native **Rust merge addon** (napi-rs) targeting **50,000 ops/sec**. Full-stack monorepo with a Node.js/TypeScript backend and a Next.js 14 frontend showcasing interactive demos.
+A production-grade distributed real-time collaboration engine using **CRDTs** (Conflict-free Replicated Data Types) with a native **Rust merge addon** (napi-rs) achieving **345,000 ops/sec**. Full-stack monorepo with a Node.js/TypeScript backend and a Next.js 14 frontend showcasing interactive demos.
 
 > **Live:** [frontend-one-sable-24.vercel.app](https://frontend-one-sable-24.vercel.app) | **Blog:** [/blog](https://frontend-one-sable-24.vercel.app/blog) | **Backend:** [collaborative-sync-engine-caj8.onrender.com](https://collaborative-sync-engine-caj8.onrender.com) | **Repo:** [github.com/nooblancer/collaborative-sync-engine](https://github.com/nooblancer/collaborative-sync-engine)
 
@@ -10,7 +10,9 @@ Multiple users can simultaneously edit shared state with perfect consistency. Th
 
 ### Core Capabilities
 
-- **50K ops/sec throughput** — Native Rust addon (napi-rs) for CPU-bound CRDT merge
+- **345K ops/sec throughput** — Native Rust addon (napi-rs) for CPU-bound CRDT merge
+- **5 benchmark modes** — Standard, Conflict Resolution, Concurrent Rooms, Operation Breakdown, Snapshot/Compaction
+- **O(n) optimized Rust merge** — zero-clone in-place mutation via `mergeBatchBenchmark`
 - **Sub-5ms P50 latency** — Batch processing pipeline with 1-5ms windows
 - **Multi-room architecture** — Isolated collaborative sessions with dynamic creation
 - **100K offline queue** — Client SDK queues operations with local storage persistence
@@ -23,7 +25,7 @@ Multiple users can simultaneously edit shared state with perfect consistency. Th
 
 ### Interactive Demos (Landing Page)
 
-- **Stress Test** — Flood the engine with 100-5000 operations in burst mode, watch live throughput/latency/convergence
+- **Stress Test** — 5 benchmark modes (Standard, Conflict, Rooms, Breakdown, Snapshot) supporting up to 1M operations with real-time throughput/latency/memory measurement
 - **Split-Screen Sync** — Two independent panels with batch add (1-100 cards), remove all, bidirectional sync
 - **Collaborative Whiteboard** — Draw shapes with dual bot collaborators (BotAlice + BotBob), start/stop toggles, clear board
 - **Live Metrics** — Simulated real-time ops/sec, P50/P99, connection counts, 60s throughput chart

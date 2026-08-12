@@ -39,7 +39,8 @@ import {
   RedisCache,
   type RedisCacheV2Interface,
 } from "./persistence/redis-cache.js";
-import { runBenchmark, validateBenchmarkInput } from "./benchmark.js";
+import { validateBenchmarkRequest, handleBenchmark } from "./benchmark.js";
+import { prewarmCache } from "./benchmark-workload-cache.js";
 
 // Types
 import type {
@@ -336,7 +337,7 @@ export async function createServer(config?: Partial<ServerConfig>): Promise<Serv
         chunks.push(chunk);
       });
       req.on("end", () => {
-        let body: Record<string, unknown>;
+        let body: unknown;
         try {
           const raw = Buffer.concat(chunks).toString("utf-8");
           body = raw.length > 0 ? JSON.parse(raw) : {};
@@ -346,23 +347,25 @@ export async function createServer(config?: Partial<ServerConfig>): Promise<Serv
           return;
         }
 
-        // Apply defaults per Requirements 1.3, 1.5
-        const ops = body.ops !== undefined ? Number(body.ops) : 50000;
-        const batchSize = body.batchSize !== undefined ? Number(body.batchSize) : 50;
-
-        // Validate input
-        const validationError = validateBenchmarkInput(ops, batchSize);
-        if (validationError) {
+        // Validate request using mode-aware validator (Requirements 7.1, 7.2, 7.5, 7.6)
+        const validation = validateBenchmarkRequest(body);
+        if (!validation.valid) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(validationError));
+          res.end(JSON.stringify(validation.error));
           return;
         }
 
-        // Run benchmark and return response
+        // Dispatch to mode router (Requirements 7.1, 7.2, 7.7)
         try {
-          const result = runBenchmark(ops, batchSize);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(result));
+          const result = handleBenchmark(validation.params);
+          // Check if the result is an error response (e.g., timeout, snapshot failure)
+          if ("error" in result) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify(result));
+          } else {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify(result));
+          }
         } catch (err) {
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({
@@ -698,6 +701,11 @@ export async function main(): Promise<void> {
     console.log(`  Cache:                ${config.redisUrl ? "Redis" : "In-memory"}`);
     console.log(`  JWT Secret:           ${config.jwtSecret === "development-secret" ? "(development default)" : "(configured)"}`);
     console.log(`  ─────────────────────────────────────────────────\n`);
+
+    // Pre-generate benchmark workloads so first request is instant
+    console.log("  Pre-warming benchmark workload cache...");
+    prewarmCache();
+    console.log("  Benchmark cache ready.\n");
   });
 
   // Handle graceful shutdown

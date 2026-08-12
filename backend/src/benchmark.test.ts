@@ -230,14 +230,13 @@ describe("benchmark HTTP endpoint", () => {
     expect(body.error).toBe("Invalid batch size");
   });
 
-  it("uses default batchSize=50 when batchSize field is omitted (Req 1.5)", async () => {
-    // Send ops=100 without batchSize. Default batchSize=50 means batchSize <= ops (50 <= 100).
-    // This should succeed, proving the default batchSize=50 is applied.
-    // We verify batchesProcessed = ceil(100/50) = 2 to confirm the default.
+  it("uses default batchSize=1000 when batchSize field is omitted (Req 1.5)", async () => {
+    // Send ops=100 without batchSize. Default batchSize=1000 means batchSize is capped at ops effectively.
+    // ceil(100/1000) = 1 batch processed, proving the default batchSize=1000 is applied.
     const response = await makeRequest(port, "POST", "/benchmark", { ops: 100 });
     expect(response.statusCode).toBe(200);
     const body = response.body as Record<string, unknown>;
-    expect(body.batchesProcessed).toBe(2); // ceil(100/50) = 2, proving default batchSize=50
+    expect(body.batchesProcessed).toBe(1); // ceil(100/1000) = 1, proving default batchSize=1000
   });
 
   it.skip("applies both defaults correctly when body is empty (Req 1.3, 1.5) [slow: 50k ops]", async () => {
