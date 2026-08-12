@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
 
+// Mirror the internal constant from WhiteboardCanvas for testing bot activation timing
+const BOT_ACTIVATION_DELAY_MS = 2500;
+
 // Mock fetch and WebSocket for tests
 const mockWs = {
   send: vi.fn(),
@@ -149,5 +152,76 @@ describe("WhiteboardCanvas", () => {
       const wsUrl = (global.WebSocket as any).mock.calls[0][0] as string;
       expect(wsUrl).toContain("whiteboard-demo");
     }
+  });
+
+  describe("bot status indicator (Requirement 3.4)", () => {
+    it("displays pause indicator when 2+ real users are present", async () => {
+      render(<WhiteboardCanvas roomId="test-room" />);
+
+      // Advance timers so WebSocket connection sets up
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      // Simulate receiving an awareness update from a second real user
+      // (non-bot client ID)
+      const awarenessFrame = JSON.stringify({
+        channel: "awareness",
+        type: "awareness-update",
+        payload: {
+          clientId: "real-user-2-abc123",
+          cursor: { x: 100, y: 200 },
+          displayName: "TestUser",
+          color: "#ff6b6b",
+        },
+      });
+
+      // Trigger the WebSocket onmessage handler
+      await act(async () => {
+        if (mockWs.onmessage) {
+          mockWs.onmessage({ data: awarenessFrame });
+        }
+        await vi.advanceTimersByTimeAsync(50);
+      });
+
+      // The pause indicator should now be visible
+      expect(screen.getByText(/Bots paused/)).toBeInTheDocument();
+      expect(screen.getByText(/real user/)).toBeInTheDocument();
+    });
+
+    it("does not display pause indicator with only 1 real user", async () => {
+      render(<WhiteboardCanvas roomId="test-room" />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      // No remote real users joined, only local user exists
+      // The pause indicator should NOT be visible
+      expect(screen.queryByText(/Bots paused/)).not.toBeInTheDocument();
+    });
+
+    it("does not display pause indicator when only bot cursors are present", async () => {
+      render(<WhiteboardCanvas roomId="test-room" />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      // Bot cursors appear from the useBot hook via requestAnimationFrame
+      // but they should not cause the pause indicator to show.
+      // Simulate running some raf callbacks to allow bot cursors to appear.
+      await act(async () => {
+        // Run a few RAF callbacks to let bots register their cursors
+        for (let i = 0; i < 3 && rafCallbacks.length > 0; i++) {
+          const cb = rafCallbacks.shift()!;
+          cb();
+        }
+        await vi.advanceTimersByTimeAsync(BOT_ACTIVATION_DELAY_MS + 100);
+      });
+
+      // Still no pause indicator since bots don't count as real users
+      expect(screen.queryByText(/Bots paused/)).not.toBeInTheDocument();
+    });
   });
 });

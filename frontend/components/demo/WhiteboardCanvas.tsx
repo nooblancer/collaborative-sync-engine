@@ -96,10 +96,29 @@ interface BotConfig {
   enabled: boolean;
 }
 
+const BOT_CLIENT_ID_PREFIX = "bot-";
+
 const BOT_CONFIGS: BotConfig[] = [
   { name: "BotAlice", color: "#ff00ff", clientId: "bot-alice-simulated", enabled: true },
   { name: "BotBob", color: "#00ff88", clientId: "bot-bob-simulated", enabled: false },
 ];
+
+/**
+ * Pure function that determines whether bots should be active
+ * based on the number of real users in the room.
+ * Real users are participants whose clientId does NOT start with the bot prefix.
+ * Bots remain active when real user count <= 1 (solo or solo-demo mode).
+ * Bots stop when real user count >= 2 (real collaboration).
+ */
+export function shouldBotsBeActive(
+  participants: string[],
+  botPrefix: string
+): boolean {
+  const realUserCount = participants.filter(
+    (id) => !id.startsWith(botPrefix)
+  ).length;
+  return realUserCount <= 1;
+}
 
 const BOT_ACTIVATION_DELAY_MS = 2500;
 const BOT_MIN_INTERVAL_MS = 1000;
@@ -298,9 +317,26 @@ export function WhiteboardCanvas({
   // --- Bot collaborators ---
   const [botAliceEnabled, setBotAliceEnabled] = useState(true);
   const [botBobEnabled, setBotBobEnabled] = useState(true);
+  const [botsPausedByAwareness, setBotsPausedByAwareness] = useState(false);
+  const [realUserCount, setRealUserCount] = useState(1);
 
-  useBot(BOT_CONFIGS[0], botAliceEnabled, width, height, setRemoteCursors, setObjects);
-  useBot(BOT_CONFIGS[1], botBobEnabled, width, height, setRemoteCursors, setObjects);
+  // Compute whether bots should be active based on awareness participant list
+  useEffect(() => {
+    // Build participant list: local user + all remote cursors
+    const localId = identityRef.current.userId;
+    const participants = [localId, ...Array.from(remoteCursors.keys())];
+    const botsActive = shouldBotsBeActive(participants, BOT_CLIENT_ID_PREFIX);
+    const realCount = participants.filter((id) => !id.startsWith(BOT_CLIENT_ID_PREFIX)).length;
+    setBotsPausedByAwareness(!botsActive);
+    setRealUserCount(realCount);
+  }, [remoteCursors]);
+
+  // Effective bot enable state: user toggle AND not paused by awareness
+  const effectiveBotAliceEnabled = botAliceEnabled && !botsPausedByAwareness;
+  const effectiveBotBobEnabled = botBobEnabled && !botsPausedByAwareness;
+
+  useBot(BOT_CONFIGS[0], effectiveBotAliceEnabled, width, height, setRemoteCursors, setObjects);
+  useBot(BOT_CONFIGS[1], effectiveBotBobEnabled, width, height, setRemoteCursors, setObjects);
 
   const clearBoard = useCallback(() => {
     setObjects([]);
@@ -936,6 +972,16 @@ export function WhiteboardCanvas({
               <span className="text-xs text-foreground-muted">{cursor.displayName}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Bot paused status indicator */}
+      {botsPausedByAwareness && (
+        <div className="absolute top-12 right-3 z-10 flex items-center gap-2 rounded-lg bg-warning/10 backdrop-blur-sm border border-warning/30 px-3 py-1.5">
+          <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+          <span className="text-xs text-warning">
+            Bots paused — {realUserCount} real user{realUserCount !== 1 ? "s" : ""} present
+          </span>
         </div>
       )}
 

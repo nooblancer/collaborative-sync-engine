@@ -39,6 +39,7 @@ import {
   RedisCache,
   type RedisCacheV2Interface,
 } from "./persistence/redis-cache.js";
+import { runBenchmark, validateBenchmarkInput } from "./benchmark.js";
 
 // Types
 import type {
@@ -325,6 +326,51 @@ export async function createServer(config?: Partial<ServerConfig>): Promise<Serv
           opsPerSecond: metrics.opsPerSecond,
         },
       }));
+      return;
+    }
+
+    // Benchmark endpoint — POST /benchmark
+    if (url.pathname === "/benchmark" && req.method === "POST") {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+      });
+      req.on("end", () => {
+        let body: Record<string, unknown>;
+        try {
+          const raw = Buffer.concat(chunks).toString("utf-8");
+          body = raw.length > 0 ? JSON.parse(raw) : {};
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid JSON body" }));
+          return;
+        }
+
+        // Apply defaults per Requirements 1.3, 1.5
+        const ops = body.ops !== undefined ? Number(body.ops) : 50000;
+        const batchSize = body.batchSize !== undefined ? Number(body.batchSize) : 50;
+
+        // Validate input
+        const validationError = validateBenchmarkInput(ops, batchSize);
+        if (validationError) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(validationError));
+          return;
+        }
+
+        // Run benchmark and return response
+        try {
+          const result = runBenchmark(ops, batchSize);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            error: "Benchmark failed",
+            details: "Internal merge engine error",
+          }));
+        }
+      });
       return;
     }
 
