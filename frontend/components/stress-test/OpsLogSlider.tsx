@@ -2,24 +2,40 @@
 
 import { cn } from "@/lib/utils";
 
-/** Fixed log-scale stops for the benchmark ops slider */
-const LOG_STOPS = [1_000, 10_000, 100_000, 500_000, 1_000_000];
-const LOG_LABELS = ["1K", "10K", "100K", "500K", "1M"];
+/** Default log-scale stops for the benchmark ops slider */
+const DEFAULT_STOPS = [1_000, 10_000, 100_000, 500_000, 1_000_000];
+const DEFAULT_LABELS = ["1K", "10K", "100K", "500K", "1M"];
 
 interface OpsLogSliderProps {
   value: number;
   onChange: (ops: number) => void;
   disabled?: boolean;
+  stops?: number[];
+  labels?: string[];
 }
 
 /**
- * A log-scale slider with fixed stops at 1K, 10K, 100K, 500K, 1M.
+ * A log-scale slider with fixed stops (configurable).
  * Displays as a discrete step slider with labeled tick marks.
+ *
+ * Defaults to stops at 1K, 10K, 100K, 500K, 1M.
+ * Pass custom `stops` and `labels` for different ranges.
  */
-export function OpsLogSlider({ value, onChange, disabled = false }: OpsLogSliderProps): JSX.Element {
+export function OpsLogSlider({
+  value,
+  onChange,
+  disabled = false,
+  stops = DEFAULT_STOPS,
+  labels = DEFAULT_LABELS,
+}: OpsLogSliderProps): JSX.Element {
+  // Use provided labels or auto-generate from stops
+  const displayLabels = labels.length === stops.length
+    ? labels
+    : stops.map((s) => s >= 1000 ? `${(s / 1000).toLocaleString()}K` : s.toLocaleString());
+
   // Find the closest stop index for the current value
-  const currentIndex = LOG_STOPS.reduce((closest, stop, idx) => {
-    return Math.abs(stop - value) < Math.abs(LOG_STOPS[closest] - value) ? idx : closest;
+  const currentIndex = stops.reduce((closest, stop, idx) => {
+    return Math.abs(stop - value) < Math.abs(stops[closest] - value) ? idx : closest;
   }, 0);
 
   return (
@@ -38,13 +54,13 @@ export function OpsLogSlider({ value, onChange, disabled = false }: OpsLogSlider
         <input
           type="range"
           min={0}
-          max={LOG_STOPS.length - 1}
+          max={stops.length - 1}
           step={1}
           value={currentIndex}
           disabled={disabled}
           onChange={(e) => {
             const idx = parseInt(e.target.value, 10);
-            onChange(LOG_STOPS[idx]);
+            onChange(stops[idx]);
           }}
           className={cn(
             "w-full h-2 rounded-full appearance-none cursor-pointer",
@@ -63,12 +79,12 @@ export function OpsLogSlider({ value, onChange, disabled = false }: OpsLogSlider
 
         {/* Tick labels */}
         <div className="flex justify-between mt-1 px-0.5">
-          {LOG_LABELS.map((label, idx) => (
+          {displayLabels.map((label, idx) => (
             <button
               key={label}
               type="button"
               disabled={disabled}
-              onClick={() => onChange(LOG_STOPS[idx])}
+              onClick={() => onChange(stops[idx])}
               className={cn(
                 "text-[10px] font-mono transition-colors",
                 idx === currentIndex

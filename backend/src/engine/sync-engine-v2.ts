@@ -5,13 +5,18 @@
  * operations to the existing merge engine, emits ConflictEvents when
  * LWW resolution occurs, and coordinates batch processing.
  *
+ * Uses Rust-owned room state via native merge addon for production
+ * batch processing path (createRoom → mergeOps → dropRoom), with
+ * fallback to TypeScript merge for single operations and error recovery.
+ *
  * Each room maintains fully isolated state: operations in one room
  * produce no side effects in another.
  *
- * Requirements: 1.1, 1.3, 1.7, 3.1-3.7, 7.1-7.6
+ * Requirements: 1.1, 1.3, 1.7, 1.9, 1.10, 1.12, 3.1-3.7, 7.1-7.6
  */
 
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import type {
   Room,
   RoomParticipant,
@@ -27,6 +32,18 @@ import type {
 import { mergeOperation } from "./merge.js";
 import { compareTimestamps } from "./hlc.js";
 import { BatchProcessor } from "./batch-processor.js";
+
+// Load native merge addon for room-based functions
+const nativeMergePath = path.join(__dirname, "..", "..", "native-merge", "native-merge.node");
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const nativeMerge = require(nativeMergePath) as {
+  createRoom: (roomId: string) => void;
+  mergeOps: (roomId: string, operations: Buffer[]) => Buffer;
+  getState: (roomId: string) => Buffer;
+  dropRoom: (roomId: string) => void;
+  mergeBatch: (state: Buffer, operations: Buffer[]) => Buffer;
+};
 
 /** Maximum number of conflict events retained per room. */
 const MAX_CONFLICT_HISTORY = 100;
@@ -92,6 +109,9 @@ export class SyncEngineV2 {
   /**
    * Creates a new room with a unique identifier and empty CRDT state.
    *
+   * Also initializes the room in the Rust-side Room_State_Store for
+   * native merge_ops processing.
+   *
    * @param roomId - Optional room ID. If not provided, a UUID is generated.
    * @returns The newly created Room.
    */
@@ -111,6 +131,14 @@ export class SyncEngineV2 {
     this.rooms.set(id, room);
     this.operationLogs.set(id, []);
     this.roomSnapshots.set(id, []);
+
+    // Initialize room in native Rust state store
+    try {
+      nativeMerge.createRoom(id);
+    } catch {
+      // Non-fatal: room-based native path will fall back to mergeBatch
+    }
+
     return room;
   }
 
@@ -127,12 +155,22 @@ export class SyncEngineV2 {
   /**
    * Deletes a room and all its state.
    *
+   * Also drops the room from the Rust-side Room_State_Store,
+   * releasing native memory.
+   *
    * @param roomId - The room identifier to delete.
    */
   deleteRoom(roomId: string): void {
     this.rooms.delete(roomId);
     this.operationLogs.delete(roomId);
     this.roomSnapshots.delete(roomId);
+
+    // Drop room from native Rust state store
+    try {
+      nativeMerge.dropRoom(roomId);
+    } catch {
+      // Non-fatal: room may not exist in native store
+    }
   }
 
   /**
@@ -204,9 +242,8 @@ export class SyncEngineV2 {
   /**
    * Processes a batch of operations for a room.
    *
-   * Applies each operation sequentially (maintaining causal order for
-   * same-client operations), accumulates results, and returns a
-   * BatchMergeResult summarizing the batch.
+   * Uses native `mergeOps` for optimized batch processing (state stays in Rust).
+   * Falls back to sequential TypeScript merge if the native path fails.
    *
    * @param roomId - Target room identifier.
    * @param operations - Array of CRDT operations to process.
@@ -234,6 +271,71 @@ export class SyncEngineV2 {
       };
     }
 
+    // Try native mergeOps path first (Requirement 1.10, 4.5 fallback)
+    try {
+      const opBuffers = operations.map((op) => Buffer.from(JSON.stringify(op)));
+      const deltaBuffer = nativeMerge.mergeOps(roomId, opBuffers);
+      const delta = JSON.parse(deltaBuffer.toString()) as {
+        roomId: string;
+        merged: number;
+        conflicts: number;
+        failed: number;
+        itemCount: number;
+        changes: Array<{ itemId: string; type: string; fields?: Record<string, unknown> }>;
+        timestamp: HLCTimestamp;
+      };
+
+      // Update local state from native store for consistency
+      try {
+        const stateBuffer = nativeMerge.getState(roomId);
+        room.state = JSON.parse(stateBuffer.toString()) as CRDTState;
+      } catch {
+        // If getState fails, state may be slightly stale but not critical
+      }
+
+      // Persist operations to append-only log (Requirement 7.1)
+      for (const operation of operations) {
+        this.appendToOperationLog(roomId, operation);
+      }
+      room.operationCount += delta.merged;
+
+      // Build delta changes for broadcast
+      const changes: StateDelta["changes"] = delta.changes.map((c) => ({
+        type: c.type as "added" | "updated" | "removed",
+        itemId: c.itemId,
+        fields: c.fields,
+      }));
+
+      return {
+        totalReceived: operations.length,
+        merged: delta.merged,
+        failed: delta.failed > 0
+          ? operations.slice(delta.merged).map((op) => ({
+              operationId: op.id,
+              code: "merge_failed",
+              message: "Operation failed during native merge",
+            }))
+          : [],
+        finalDelta: {
+          sessionId: roomId,
+          changes,
+          timestamp: delta.timestamp,
+        },
+      };
+    } catch {
+      // Fallback to sequential TypeScript merge (Requirement 4.5)
+      return this.processBatchFallback(roomId, operations);
+    }
+  }
+
+  /**
+   * Fallback batch processing using sequential TypeScript merge.
+   * Used when native mergeOps fails.
+   */
+  private async processBatchFallback(
+    roomId: string,
+    operations: CRDTOperation[]
+  ): Promise<BatchMergeResult> {
     let merged = 0;
     const failed: Array<{
       operationId: string;
@@ -276,6 +378,9 @@ export class SyncEngineV2 {
   /**
    * Returns the current CRDT state for a room.
    *
+   * For snapshot persistence, use `getNativeState()` which reads
+   * directly from the Rust-owned room state store.
+   *
    * @param roomId - The room identifier.
    * @returns The current CRDTState, or an empty state if room doesn't exist.
    */
@@ -285,6 +390,29 @@ export class SyncEngineV2 {
       return createEmptyState(roomId);
     }
     return room.state;
+  }
+
+  /**
+   * Returns the current state directly from the Rust-owned room state store.
+   * Used for snapshot persistence where we want the authoritative Rust-held state.
+   *
+   * Falls back to TypeScript-held state if native store is unavailable.
+   *
+   * @param roomId - The room identifier.
+   * @returns The current CRDTState from native store.
+   */
+  getNativeState(roomId: string): CRDTState {
+    try {
+      const stateBuffer = nativeMerge.getState(roomId);
+      return JSON.parse(stateBuffer.toString()) as CRDTState;
+    } catch {
+      // Fallback to TypeScript-held state
+      const room = this.rooms.get(roomId);
+      if (!room) {
+        return createEmptyState(roomId);
+      }
+      return room.state;
+    }
   }
 
   /**

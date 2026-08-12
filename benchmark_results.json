@@ -1,0 +1,94 @@
+{
+  "standard": {
+    "1000": {
+      "engine_avg": 204411.24085161937,
+      "production_avg": 156179.94345953772,
+      "diff_pct": -23.59522753794758,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "10000": {
+      "engine_avg": 153125.56797351674,
+      "production_avg": 133028.1409022757,
+      "diff_pct": -13.124801649530468,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "100000": {
+      "engine_avg": 137251.3818168234,
+      "production_avg": 115424.02109083645,
+      "diff_pct": -15.903199251660649,
+      "engine_runs": 5,
+      "production_runs": 5
+    }
+  },
+  "conflict": {
+    "1000": {
+      "engine_avg": 249508.82994056158,
+      "production_avg": 245310.806054506,
+      "diff_pct": -1.682515158704255,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "10000": {
+      "engine_avg": 276651.0369458863,
+      "production_avg": 243252.93612778242,
+      "diff_pct": -12.072284704516276,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "100000": {
+      "engine_avg": 236712.1330289271,
+      "production_avg": 206441.97141787186,
+      "diff_pct": -12.787752458534152,
+      "engine_runs": 5,
+      "production_runs": 5
+    }
+  },
+  "rooms": {
+    "1000": {
+      "engine_avg": 249398.09081012974,
+      "production_avg": 245457.95488933485,
+      "diff_pct": -1.5798580927367905,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "10000": {
+      "engine_avg": 267926.7152526566,
+      "production_avg": 236534.05673475994,
+      "diff_pct": -11.716882539426196,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "100000": {
+      "engine_avg": 267194.9939971318,
+      "production_avg": 210064.55827669738,
+      "diff_pct": -21.381551677217313,
+      "engine_runs": 5,
+      "production_runs": 5
+    }
+  },
+  "snapshot": {
+    "1000": {
+      "engine_avg": 166739.1921594183,
+      "production_avg": 158443.01727411445,
+      "diff_pct": -4.97553981032362,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "10000": {
+      "engine_avg": 248428.3186330987,
+      "production_avg": 285117.0795970406,
+      "diff_pct": 14.768348940978488,
+      "engine_runs": 5,
+      "production_runs": 5
+    },
+    "100000": {
+      "engine_avg": 198588.33141774588,
+      "production_avg": 173029.53427472332,
+      "diff_pct": -12.87024114687668,
+      "engine_runs": 5,
+      "production_runs": 5
+    }
+  }
+}

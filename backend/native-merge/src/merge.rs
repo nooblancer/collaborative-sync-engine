@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use crate::hlc::{compare_hlc_timestamps, max_timestamp};
 use crate::types::{
     BatchMergeResultData, BenchmarkMergeResult, CRDTOperation, CRDTState, HLCTimestamp, ItemChange, LWWElement,
-    LWWRegister, MergeResultData, OperationError, OperationType, StateDelta,
+    LWWRegister, MergeOpsDelta, MergeResultData, OperationError, OperationType, StateDelta,
 };
 
 /// Apply a single CRDT operation to state, returning the new state and a delta.
@@ -173,7 +173,141 @@ pub fn apply_merge_batch_benchmark(mut state: CRDTState, operations: Vec<CRDTOpe
         conflicts,
         failed: failed_count,
         item_count,
-        state,
+    }
+}
+
+/// Applies operations to a mutable state reference (no ownership transfer).
+/// Used by merge_ops where state lives in the Room_State_Store.
+/// Returns MergeOpsDelta with merge metrics + item changes for delta broadcasting.
+///
+/// Same LWW/remove-wins logic as `apply_merge_batch_benchmark` but tracks item changes.
+pub fn apply_merge_in_place(state: &mut CRDTState, operations: Vec<CRDTOperation>, room_id: &str) -> MergeOpsDelta {
+    let mut merged = 0usize;
+    let mut conflicts = 0usize;
+    let mut failed_count = 0usize;
+    let mut changes: Vec<ItemChange> = Vec::with_capacity(operations.len());
+
+    for op in operations {
+        let op_timestamp = op.timestamp.clone();
+        let item_id = op.item_id.clone();
+
+        match op.op_type {
+            OperationType::Add => {
+                if let Some(existing) = state.items.get_mut(&item_id) {
+                    // Item exists — merge field-by-field in place (conflict)
+                    let mut has_changes = false;
+                    let mut changed_fields: HashMap<String, serde_json::Value> = HashMap::new();
+                    for (key, value) in &op.payload {
+                        if merge_field(&mut existing.fields, key, value.clone(), &op.timestamp, &op.replica_id) {
+                            changed_fields.insert(key.clone(), value.clone());
+                            has_changes = true;
+                        }
+                    }
+                    // Update addedAt to max
+                    let new_added_at = max_timestamp(&existing.added_at, &op.timestamp);
+                    if compare_hlc_timestamps(&new_added_at, &existing.added_at) != 0 {
+                        existing.added_at = new_added_at;
+                        has_changes = true;
+                    }
+                    if has_changes {
+                        conflicts += 1;
+                        changes.push(ItemChange {
+                            item_id: item_id.clone(),
+                            change_type: "updated".to_string(),
+                            fields: if changed_fields.is_empty() { None } else { Some(changed_fields) },
+                        });
+                    }
+                    merged += 1;
+                } else {
+                    // New item — insert directly
+                    let mut fields: HashMap<String, LWWRegister> = HashMap::new();
+                    let mut payload_fields: HashMap<String, serde_json::Value> = HashMap::new();
+                    for (key, value) in &op.payload {
+                        fields.insert(key.clone(), LWWRegister {
+                            value: value.clone(),
+                            timestamp: op.timestamp.clone(),
+                            replica_id: op.replica_id.clone(),
+                        });
+                        payload_fields.insert(key.clone(), value.clone());
+                    }
+                    state.items.insert(item_id.clone(), LWWElement {
+                        item_id: op.item_id.clone(),
+                        fields,
+                        added_at: op.timestamp.clone(),
+                        removed_at: None,
+                    });
+                    changes.push(ItemChange {
+                        item_id: item_id.clone(),
+                        change_type: "added".to_string(),
+                        fields: Some(payload_fields),
+                    });
+                    merged += 1;
+                }
+            }
+            OperationType::Remove => {
+                if let Some(existing) = state.items.get_mut(&item_id) {
+                    let new_removed_at = match &existing.removed_at {
+                        Some(existing_removed) => max_timestamp(existing_removed, &op.timestamp),
+                        None => op.timestamp.clone(),
+                    };
+                    let changed = match &existing.removed_at {
+                        Some(existing_removed) => compare_hlc_timestamps(&new_removed_at, existing_removed) != 0,
+                        None => true,
+                    };
+                    if changed {
+                        existing.removed_at = Some(new_removed_at);
+                        changes.push(ItemChange {
+                            item_id: item_id.clone(),
+                            change_type: "removed".to_string(),
+                            fields: None,
+                        });
+                    }
+                    merged += 1;
+                } else {
+                    // Item doesn't exist — no-op but still counts as merged
+                    merged += 1;
+                }
+            }
+            OperationType::Update => {
+                if let Some(existing) = state.items.get_mut(&item_id) {
+                    let mut has_changes = false;
+                    let mut changed_fields: HashMap<String, serde_json::Value> = HashMap::new();
+                    for (key, value) in &op.payload {
+                        if merge_field(&mut existing.fields, key, value.clone(), &op.timestamp, &op.replica_id) {
+                            changed_fields.insert(key.clone(), value.clone());
+                            has_changes = true;
+                        }
+                    }
+                    if has_changes {
+                        conflicts += 1;
+                        changes.push(ItemChange {
+                            item_id: item_id.clone(),
+                            change_type: "updated".to_string(),
+                            fields: if changed_fields.is_empty() { None } else { Some(changed_fields) },
+                        });
+                    }
+                    merged += 1;
+                } else {
+                    // Item doesn't exist — failed
+                    failed_count += 1;
+                }
+            }
+        }
+
+        // Update state metadata
+        state.version += 1;
+        state.last_updated = max_timestamp(&state.last_updated, &op_timestamp);
+    }
+
+    let item_count = state.items.len();
+    MergeOpsDelta {
+        room_id: room_id.to_string(),
+        merged,
+        conflicts,
+        failed: failed_count,
+        item_count,
+        changes,
+        timestamp: state.last_updated.clone(),
     }
 }
 

@@ -145,5 +145,21 @@ pub struct BenchmarkMergeResult {
     pub conflicts: usize,
     pub failed: usize,
     pub item_count: usize,
-    pub state: CRDTState,
+    // NOTE: state is intentionally NOT included here.
+    // Serializing 1M items back to JSON would dominate the benchmark time.
+    // The engine benchmark measures merge speed, not serialization speed.
+}
+
+/// Delta returned by `merge_ops` — lightweight result with change tracking.
+/// State is NOT included (it stays in Rust memory); only the delta crosses the boundary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeOpsDelta {
+    pub room_id: String,
+    pub merged: usize,
+    pub conflicts: usize,
+    pub failed: usize,
+    pub item_count: usize,
+    pub changes: Vec<ItemChange>,
+    pub timestamp: HLCTimestamp,
 }

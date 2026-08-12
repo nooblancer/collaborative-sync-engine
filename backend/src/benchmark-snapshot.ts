@@ -18,6 +18,10 @@ const nativeMergePath = path.join(__dirname, "..", "native-merge", "native-merge
 const nativeMerge = require(nativeMergePath) as {
   mergeBatchBenchmark: (state: Buffer, operations: Buffer[]) => Buffer;
   computeSnapshot: (state: Buffer) => Buffer;
+  createRoom: (roomId: string) => void;
+  mergeOps: (roomId: string, operations: Buffer[]) => Buffer;
+  getState: (roomId: string) => Buffer;
+  dropRoom: (roomId: string) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -68,41 +72,30 @@ export function runSnapshotBenchmark(
   // Get cached snapshot workload with ≥20% removes
   const allOperations = getCachedSnapshotWorkload(ops);
 
-  // Initialize empty CRDT state
-  const initialState = Buffer.from(JSON.stringify({
-    sessionId: "benchmark-snapshot",
-    items: {},
-    version: 0,
-    lastUpdated: { wallTime: 0, logical: 0, nodeId: "benchmark-snapshot" },
-  }));
+  // Use room-based path: merge ops (timed), then get state for snapshot
+  const roomId = `benchmark-snapshot-engine-${Date.now()}`;
+  nativeMerge.createRoom(roomId);
 
   // Memory sampling
   const memorySampler = new MemorySampler();
   memorySampler.recordBaseline();
 
-  // Phase 1: Apply all operations in one optimized Rust call
+  // Phase 1: Apply all operations — timing only the merge
   const overallStart = process.hrtime.bigint();
-  const mergeResultBuffer = nativeMerge.mergeBatchBenchmark(initialState, allOperations);
+  nativeMerge.mergeOps(roomId, allOperations);
   const mergeEnd = process.hrtime.bigint();
 
   memorySampler.sample();
 
   const elapsedMs = Number(mergeEnd - overallStart) / 1_000_000;
 
-  // Parse lightweight result to get itemCount and state
-  const mergeResult = JSON.parse(mergeResultBuffer.toString()) as {
-    totalReceived: number;
-    merged: number;
-    conflicts: number;
-    failed: number;
-    itemCount: number;
-    state: unknown;
-  };
+  // Get state from Rust for computeSnapshot (not timed — this is setup for phase 2)
+  const stateBuffer = nativeMerge.getState(roomId);
+  const stateObj = JSON.parse(stateBuffer.toString()) as { items: Record<string, unknown> };
+  const itemsBefore = Object.keys(stateObj.items).length;
 
-  const itemsBefore = mergeResult.itemCount;
-
-  // Extract just the state for computeSnapshot
-  const stateBuffer = Buffer.from(JSON.stringify(mergeResult.state));
+  // Clean up room
+  nativeMerge.dropRoom(roomId);
 
   // Phase 2: Measure computeSnapshot duration
   let snapshotDurationMs: number;

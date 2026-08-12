@@ -2,6 +2,66 @@
 
 All notable changes to Convergence are documented here.
 
+## [2.4.5] — August 2026
+
+### Rust-Owned Room State + simd-json + Rayon
+
+**What changed:**
+- CRDT state now lives permanently in Rust memory per room — no more state serialization crossing the Node.js↔Rust boundary during normal operations
+- JSON parsing upgraded to simd-json (SIMD-accelerated, 2-4x faster than serde_json)
+- Batches >100K ops are deserialized in parallel via Rayon across all CPU cores
+- SyncEngineV2 now uses native room functions (createRoom → mergeOps → dropRoom)
+- Benchmark runners migrated to room-based path with full delta tracking
+
+**Performance (v2.4.5 production path with delta tracking):**
+- 1M conflict: 4.4s at 226K ops/sec (production-ready with broadcast deltas)
+- 1M standard: 9.3s at 107K ops/sec (unique keys, large HashMap)
+- 1M rooms (5): 11.8s at 85K ops/sec
+- 1M snapshot: 10.2s at 98K ops/sec
+- Pure merge speed (mergeBatchBenchmark, no deltas): 345K ops/sec peak
+
+**Why production numbers are lower than v2.4.2 pure benchmarks:**
+- `mergeOps` builds full Vec<ItemChange> for every state mutation (needed for real-time broadcast)
+- simd-json requires .to_vec() per operation buffer (mutable input requirement)
+- Room lifecycle (createRoom/dropRoom + Mutex) adds constant overhead
+- This is the honest cost of production-readiness vs synthetic benchmarking
+
+**Added:**
+- `createRoom(roomId)` — allocates Rust-owned CRDTState, idempotent
+- `mergeOps(roomId, ops)` — in-place merge returning broadcast-ready delta
+- `getState(roomId)` — serializes Rust-held state for snapshots/client sync
+- `dropRoom(roomId)` — releases all Rust memory for a room, idempotent
+- simd-json for all deserialization paths (operations + state)
+- Rayon parallel deserialization gated at 100K ops threshold
+- Vec::with_capacity pre-allocation for delta change tracking
+- SyncEngineV2 native integration with TypeScript fallback (Req 4.5)
+
+**Fixed:**
+- Engine benchmark (mergeBatchBenchmark) was serializing the full CRDTState in response — at 1M ops with unique keys, the state JSON was enormous and dominated timing. Removed state from BenchmarkMergeResult, now returns only metrics. Engine numbers correctly reflect pure merge speed.
+- Benchmark runners (conflict, rooms, snapshot) were accidentally using production mergeOps path instead of mergeBatchBenchmark. Reverted to fast path for engine benchmarks.
+
+**Frontend (v2.4.5):**
+- Three-section benchmark page: Engine, Production, Browser — each with distinct purpose
+- BenchmarkRunningIndicator — shared component with pulsing animation + elapsed timer
+- OpsLogSlider — configurable stops/labels prop for different benchmark ranges
+- Browser benchmark updated: uses OpsLogSlider (100→10K stops), consistent MetricCounter, same connection status style
+- "Three Benchmarks, Three Perspectives" polished intro section with colored indicators
+- Navbar Share button (cyan default, dark on hover), removed duplicate page share button
+- Proper top padding (pt-28) to prevent navbar overlap
+
+**Architecture:**
+- Production: Node.js passes room_id + op Buffers → Rust holds state in memory → returns delta only
+- State NEVER serialized during normal batch processing (only for snapshots/client sync)
+- Offline replay: queued ops go through mergeOps directly against Rust-held state
+
+**Future optimization scope (documented, not implemented):**
+- Binary protocol (MessagePack) for WebSocket operations — 2-3x smaller payloads
+- Pre-parsed operation cache for replay scenarios — would skip deserialization entirely
+- Custom arena allocator for HashMap entries — 10-20% allocation reduction
+- These were analyzed and deferred (see .kiro/performance-optimization-roadmap.md)
+
+---
+
 ## [2.4.2] — August 2026
 
 ### 5 Benchmark Modes + Rust Performance Optimization

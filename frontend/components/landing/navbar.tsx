@@ -1,5 +1,9 @@
+"use client";
+
+import { useState, useCallback } from "react";
 import Link from "next/link";
-import { Github } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Github, Share2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const sectionLinks = [
@@ -11,6 +15,16 @@ const sectionLinks = [
 ];
 
 export default function Navbar() {
+  const pathname = usePathname();
+  const isStressTest = pathname === "/stress-test";
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(async () => {
+    await navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, []);
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -40,9 +54,28 @@ export default function Navbar() {
           >
             <Github className="h-5 w-5" />
           </a>
-          <Link href="#demos">
-            <Button size="sm">Launch Demo</Button>
-          </Link>
+          {isStressTest ? (
+            <button
+              onClick={() => void handleShare()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-background border border-accent shadow-[0_0_12px_rgba(0,255,255,0.3)] hover:bg-background-surface hover:text-foreground-muted hover:border-border hover:shadow-none transition-all duration-200"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-3.5 w-3.5" />
+                  Share
+                </>
+              )}
+            </button>
+          ) : (
+            <Link href="#demos">
+              <Button size="sm">Launch Demo</Button>
+            </Link>
+          )}
         </div>
       </div>
     </nav>

@@ -7,6 +7,7 @@ import type {
   RoomsBenchmarkResponse,
   BreakdownBenchmarkResponse,
   SnapshotBenchmarkResponse,
+  OperationTypeMetrics,
 } from "@/lib/stress-test-types";
 
 interface UnifiedResultsDisplayProps {
@@ -15,13 +16,15 @@ interface UnifiedResultsDisplayProps {
 
 /**
  * Unified results display for all benchmark modes.
- * 
+ *
  * Always shows the same top-level layout:
  * 1. Hero metric: Ops/sec (large, prominent)
  * 2. Core metrics row: Total Ops | Elapsed | Memory
- * 3. Mode-specific extras (if any)
- * 
- * This ensures consistent visual structure regardless of which mode ran.
+ * 3. Latency row: P50 | P99 | Batches
+ * 4. Mode-specific detailed output (conflict count, per-room, breakdown, snapshot)
+ *
+ * This ensures consistent visual structure regardless of which mode ran,
+ * while still showing ALL data from each mode's detailed output.
  */
 export function UnifiedResultsDisplay({ results }: UnifiedResultsDisplayProps): JSX.Element {
   return (
@@ -34,8 +37,8 @@ export function UnifiedResultsDisplay({ results }: UnifiedResultsDisplayProps): 
         <span className="text-sm text-foreground-muted">ops/sec</span>
       </div>
 
-      {/* Core metrics — always the same 3 columns */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Core metrics — always the same columns */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <MetricCounter
           value={results.totalOps}
           label="Total Ops"
@@ -52,98 +55,120 @@ export function UnifiedResultsDisplay({ results }: UnifiedResultsDisplayProps): 
           suffix="MB"
           decimals={2}
         />
+        <MetricCounter
+          value={results.batchesProcessed}
+          label="Batches"
+        />
       </div>
 
-      {/* Mode-specific extras */}
-      <ModeExtras results={results} />
+      {/* Latency metrics */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <MetricCounter
+          value={results.p50Ms}
+          label="P50"
+          suffix="ms"
+          decimals={2}
+        />
+        <MetricCounter
+          value={results.p99Ms}
+          label="P99"
+          suffix="ms"
+          decimals={2}
+        />
+        {results.memoryPeakMb != null && (
+          <MetricCounter
+            value={results.memoryPeakMb}
+            label="Peak Heap"
+            suffix="MB"
+            decimals={2}
+          />
+        )}
+      </div>
+
+      {/* Mode-specific detailed output */}
+      <ModeDetailedOutput results={results} />
     </div>
   );
 }
 
-/** Mode-specific additional metrics, shown below the universal core */
-function ModeExtras({ results }: { results: BenchmarkModeResponse }): JSX.Element | null {
+/** Mode-specific detailed output — shows full data below the unified hero section */
+function ModeDetailedOutput({ results }: { results: BenchmarkModeResponse }): JSX.Element | null {
   switch (results.mode) {
     case "conflict":
-      return <ConflictExtras results={results} />;
+      return <ConflictDetailedOutput results={results} />;
     case "rooms":
-      return <RoomsExtras results={results} />;
+      return <RoomsDetailedOutput results={results} />;
     case "breakdown":
-      return <BreakdownExtras results={results} />;
+      return <BreakdownDetailedOutput results={results} />;
     case "snapshot":
-      return <SnapshotExtras results={results} />;
+      return <SnapshotDetailedOutput results={results} />;
     case "standard":
     default:
-      return null; // Standard mode has no extras — core metrics are enough
+      return null; // Standard mode has no extras — core metrics are sufficient
   }
 }
 
-function ConflictExtras({ results }: { results: ConflictBenchmarkResponse }): JSX.Element {
+function ConflictDetailedOutput({ results }: { results: ConflictBenchmarkResponse }): JSX.Element {
   return (
     <div className="border-t border-border/50 pt-4">
       <h4 className="text-xs font-medium text-foreground-muted mb-3">Conflict Resolution</h4>
       <div className="grid grid-cols-2 gap-4">
         <MetricCounter value={results.conflictResolutions} label="Conflicts Resolved" />
-        <MetricCounter value={results.finalStateItemCount} label="Final Items" />
+        <MetricCounter value={results.finalStateItemCount} label="Final State Size" suffix="items" />
       </div>
     </div>
   );
 }
 
-function RoomsExtras({ results }: { results: RoomsBenchmarkResponse }): JSX.Element {
+function RoomsDetailedOutput({ results }: { results: RoomsBenchmarkResponse }): JSX.Element {
   return (
     <div className="border-t border-border/50 pt-4">
       <h4 className="text-xs font-medium text-foreground-muted mb-3">
-        Room Performance ({results.roomCount} rooms)
+        Per-Room Summary ({results.roomCount} rooms)
       </h4>
       <div className="grid grid-cols-3 gap-4">
-        <MetricCounter value={results.fastestRoomMs} label="Fastest" suffix="ms" decimals={1} />
-        <MetricCounter value={results.slowestRoomMs} label="Slowest" suffix="ms" decimals={1} />
-        <MetricCounter value={results.averageRoomMs} label="Average" suffix="ms" decimals={1} />
+        <MetricCounter value={results.fastestRoomMs} label="Fastest Room" suffix="ms" decimals={2} />
+        <MetricCounter value={results.slowestRoomMs} label="Slowest Room" suffix="ms" decimals={2} />
+        <MetricCounter value={results.averageRoomMs} label="Average Room" suffix="ms" decimals={2} />
       </div>
     </div>
   );
 }
 
-function BreakdownExtras({ results }: { results: BreakdownBenchmarkResponse }): JSX.Element {
+function BreakdownDetailedOutput({ results }: { results: BreakdownBenchmarkResponse }): JSX.Element {
   return (
     <div className="border-t border-border/50 pt-4">
       <h4 className="text-xs font-medium text-foreground-muted mb-3">Per-Type Breakdown</h4>
-      <div className="grid grid-cols-3 gap-4 text-center">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-accent font-medium">Add</span>
-          <span className="text-lg font-mono tabular-nums">{results.add.count.toLocaleString()}</span>
-          <span className="text-[10px] text-foreground-muted">
-            avg {results.add.averageMs.toFixed(4)}ms
-          </span>
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-accent font-medium">Update</span>
-          <span className="text-lg font-mono tabular-nums">{results.update.count.toLocaleString()}</span>
-          <span className="text-[10px] text-foreground-muted">
-            avg {results.update.averageMs.toFixed(4)}ms
-          </span>
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-accent font-medium">Remove</span>
-          <span className="text-lg font-mono tabular-nums">{results.remove.count.toLocaleString()}</span>
-          <span className="text-[10px] text-foreground-muted">
-            avg {results.remove.averageMs.toFixed(4)}ms
-          </span>
-        </div>
+      <div className="grid grid-cols-3 gap-4">
+        <TypeColumn label="Add" metrics={results.add} />
+        <TypeColumn label="Update" metrics={results.update} />
+        <TypeColumn label="Remove" metrics={results.remove} />
       </div>
     </div>
   );
 }
 
-function SnapshotExtras({ results }: { results: SnapshotBenchmarkResponse }): JSX.Element {
+function TypeColumn({ label, metrics }: { label: string; metrics: OperationTypeMetrics }): JSX.Element {
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-sm font-medium text-accent">{label}</span>
+      <MetricCounter value={metrics.count} label="Count" suffix="ops" />
+      <MetricCounter value={metrics.averageMs} label="Avg" suffix="ms" decimals={4} />
+      <MetricCounter value={metrics.p50Ms} label="P50" suffix="ms" decimals={4} />
+      <MetricCounter value={metrics.p99Ms} label="P99" suffix="ms" decimals={4} />
+    </div>
+  );
+}
+
+function SnapshotDetailedOutput({ results }: { results: SnapshotBenchmarkResponse }): JSX.Element {
   return (
     <div className="border-t border-border/50 pt-4">
       <h4 className="text-xs font-medium text-foreground-muted mb-3">Snapshot Compaction</h4>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <MetricCounter value={results.snapshotDurationMs} label="Snapshot" suffix="ms" decimals={3} />
-        <MetricCounter value={results.itemsBefore} label="Before" />
-        <MetricCounter value={results.itemsAfter} label="After" />
-        <MetricCounter value={results.tombstonesRemoved} label="Removed" />
+        <MetricCounter value={results.snapshotDurationMs} label="Snapshot Duration" suffix="ms" decimals={3} />
+        <MetricCounter value={results.itemsBefore} label="Items Before" />
+        <MetricCounter value={results.itemsAfter} label="Items After" />
+        <MetricCounter value={results.tombstonesRemoved} label="Tombstones Removed" />
       </div>
     </div>
   );

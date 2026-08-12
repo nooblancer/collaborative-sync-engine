@@ -660,7 +660,7 @@ export default function StressTestDemo() {
           Click Run Test to flood the engine with operations and watch real-time throughput, latency, and convergence metrics.
         </p>
         <a
-          href="#architecture"
+          href="/stress-test"
           className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors shrink-0"
         >
           Learn More →

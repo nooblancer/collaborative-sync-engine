@@ -17,6 +17,10 @@ const nativeMergePath = path.join(__dirname, "..", "native-merge", "native-merge
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const nativeMerge = require(nativeMergePath) as {
   mergeBatchBenchmark: (state: Buffer, operations: Buffer[]) => Buffer;
+  createRoom: (roomId: string) => void;
+  mergeOps: (roomId: string, operations: Buffer[]) => Buffer;
+  getState: (roomId: string) => Buffer;
+  dropRoom: (roomId: string) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -117,7 +121,8 @@ export function runRoomsBenchmark(
     const roomOpCount = roomOps[roomIndex];
     const roomOperations = generateRoomWorkload(roomOpCount, roomIndex);
 
-    const initialState = Buffer.from(JSON.stringify({
+    // Fresh empty state per room — uses fast mergeBatchBenchmark (no delta tracking)
+    const emptyState = Buffer.from(JSON.stringify({
       sessionId: `benchmark-room-${roomIndex}`,
       items: {},
       version: 0,
@@ -125,7 +130,7 @@ export function runRoomsBenchmark(
     }));
 
     const roomStart = process.hrtime.bigint();
-    nativeMerge.mergeBatchBenchmark(initialState, roomOperations);
+    nativeMerge.mergeBatchBenchmark(emptyState, roomOperations);
     const roomEnd = process.hrtime.bigint();
 
     const roomDurationNs = roomEnd - roomStart;

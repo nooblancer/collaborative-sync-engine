@@ -19,6 +19,10 @@ const nativeMergePath = path.join(__dirname, "..", "native-merge", "native-merge
 const nativeMerge = require(nativeMergePath) as {
   mergeBatch: (state: Buffer, operations: Buffer[]) => Buffer;
   mergeBatchBenchmark: (state: Buffer, operations: Buffer[]) => Buffer;
+  createRoom: (roomId: string) => void;
+  mergeOps: (roomId: string, operations: Buffer[]) => Buffer;
+  getState: (roomId: string) => Buffer;
+  dropRoom: (roomId: string) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -84,7 +88,7 @@ export function runConflictBenchmark(
   const memorySampler = new MemorySampler();
   memorySampler.recordBaseline();
 
-  // Single call to optimized Rust function — all ops processed in Rust memory
+  // Single call to pure merge function — no delta tracking, no room overhead
   const overallStart = process.hrtime.bigint();
   const resultBuffer = nativeMerge.mergeBatchBenchmark(initialState, allOperations);
   const overallEnd = process.hrtime.bigint();

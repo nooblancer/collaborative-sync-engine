@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useServerBenchmark } from "@/hooks/use-server-benchmark";
+import { useProductionBenchmark } from "@/hooks/use-production-benchmark";
 import { OpsLogSlider } from "@/components/stress-test/OpsLogSlider";
 import { BenchmarkModeSelector } from "@/components/stress-test/BenchmarkModeSelector";
 import { BenchmarkRunningIndicator } from "@/components/stress-test/BenchmarkRunningIndicator";
@@ -26,7 +26,7 @@ function getValidationError(
   return null;
 }
 
-export function ServerBenchmarkSection(): JSX.Element {
+export function ProductionBenchmarkSection(): JSX.Element {
   const {
     state,
     selectedOps,
@@ -36,7 +36,7 @@ export function ServerBenchmarkSection(): JSX.Element {
     modeParams,
     setModeParams,
     runBenchmark,
-  } = useServerBenchmark();
+  } = useProductionBenchmark();
 
   const isRunning = state.status === "running";
   const validationError = getValidationError(selectedMode, modeParams);
@@ -55,7 +55,6 @@ export function ServerBenchmarkSection(): JSX.Element {
       }
     }
     checkHealth();
-    // Re-check every 30 seconds
     const interval = setInterval(checkHealth, 30000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
@@ -67,10 +66,10 @@ export function ServerBenchmarkSection(): JSX.Element {
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold text-foreground">
-              Engine Benchmark
+              Production Benchmark
             </h2>
             <p className="text-sm text-foreground-muted">
-              Pure Rust merge speed — no network, no deltas, no serialization overhead
+              Full production path — Rust room state + delta tracking for real-time broadcast
             </p>
           </div>
           <button
@@ -129,7 +128,7 @@ export function ServerBenchmarkSection(): JSX.Element {
           <GlowButton
             onClick={runBenchmark}
             disabled={isRunning || validationError !== null || serverStatus === "disconnected"}
-            aria-label="Run server benchmark"
+            aria-label="Run production benchmark"
           >
             {isRunning ? (
               <>
