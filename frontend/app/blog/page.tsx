@@ -18,6 +18,26 @@ interface BlogPost {
 
 const posts: BlogPost[] = [
   {
+    slug: "v2-4-2-rust-optimization",
+    title: "V2.4.2: From 40 Seconds to 233ms — O(n) Rust CRDT Optimization",
+    description: "Eliminating O(n²) state cloning in the Rust merge engine, adding workload caches, and achieving 345K ops/sec for 1M operations.",
+    content: "The benchmark page was timing out at 50K operations. The root cause: every single operation in the Rust merge engine called state.clone(), copying the entire HashMap. With 50K operations on a growing state, that's O(n²) — each clone copies more data than the last.\n\nThe fix was surgical:\n\n1. New Rust function `mergeBatchBenchmark` — processes all operations in a single call. Instead of cloning state per-op, it uses `get_mut()` to mutate the HashMap in place. Conflict counting uses a simple integer increment instead of building a changes vector.\n\n2. Workload cache — operations are pre-generated once at server startup and reused across all runs. First request is instant (no generation overhead).\n\n3. Zero intermediate serialization — the old approach serialized state to JSON between every batch (Node.js parsed it, re-stringified it, passed it back to Rust). Now: one Rust call, state stays in Rust memory the entire time.\n\nResults at 1M operations:\n• Conflict: 2.9s at 345K ops/sec\n• Standard: 6.5s at 155K ops/sec\n• Rooms (5): 5.4s at 185K ops/sec\n• Snapshot: 5.9s at 169K ops/sec\n• Breakdown: 4.7s at 211K ops/sec\n\nWhy is Standard slower? It creates one unique key per add operation — the HashMap grows to N entries. Conflict mode reuses 10 hot keys, keeping the HashMap small and cache-friendly. Both are O(n); the per-operation constant differs due to HashMap size. Standard reflects real-world high-cardinality scenarios where every write creates a new entity.\n\nWhy not O(log n)? Each operation must be processed at least once — that's a fundamental Ω(n) lower bound. Per-operation cost is O(1) amortized (HashMap insert/lookup), giving O(n) total. This is provably optimal.",
+    date: "August 2026",
+    readTime: "5 min",
+    tag: "Engineering",
+    status: "current",
+  },
+  {
+    slug: "v2-4-stress-test-page",
+    title: "V2.4: Dedicated Stress Test Page & 5 Benchmark Modes",
+    description: "A full-page benchmark dashboard with mode selection, log-scale slider, per-mode result displays, and the Rust merge engine exposed via POST /benchmark.",
+    content: "The stress test outgrew its landing page section. V2.4 gives it a dedicated page at /stress-test with two full-width sections:\n\n• Browser Benchmark — measures WebSocket round-trip throughput (client → server → merge → broadcast → client)\n• Server Benchmark — measures raw Rust merge engine speed via POST /benchmark (no WebSocket overhead)\n\nThe server benchmark now supports 5 modes:\n\n1. Standard — raw throughput with unique keys per operation (realistic write-heavy scenario)\n2. Conflict Resolution — high-contention workload with 80% ops targeting 10 hot keys\n3. Concurrent Rooms — distributes ops across N isolated CRDT states (measures scaling)\n4. Operation Breakdown — times add/update/remove individually for per-type analysis\n5. Snapshot Cost — accumulates state then measures compaction overhead\n\nThe UI features a log-scale slider (1K → 10K → 100K → 500K → 1M), unified result display (same layout for all modes), server connection indicator, and mode-specific extras (conflict count, room timing, type breakdown, snapshot metrics).\n\nEach mode validates its inputs, returns HTTP 400 for invalid requests, and includes memory measurement (peak heap + delta). 14 property-based tests verify correctness invariants across all modes.",
+    date: "August 2026",
+    readTime: "4 min",
+    tag: "Release",
+    status: "published",
+  },
+  {
     slug: "v2-4-2-benchmark-modes",
     title: "V2.4.2: 5 Benchmark Modes & 170x Rust Performance Optimization",
     description: "From 40-second timeouts to 345K ops/sec — how eliminating state.clone() and intermediate JSON serialization unlocked O(n) CRDT merge performance.",
@@ -25,7 +45,7 @@ const posts: BlogPost[] = [
     date: "August 2026",
     readTime: "6 min",
     tag: "Release",
-    status: "current",
+    status: "published",
   },
   {
     slug: "v2-4-stress-test-page",

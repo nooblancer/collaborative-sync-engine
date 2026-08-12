@@ -43,7 +43,7 @@ export function useServerBenchmark(): UseServerBenchmarkReturn {
     results: null,
     error: null,
   });
-  const [selectedOps, setSelectedOps] = useState<number>(50_000);
+  const [selectedOps, setSelectedOps] = useState<number>(10_000);
   const [selectedMode, setSelectedModeInternal] = useState<BenchmarkMode>("standard");
   const [modeParams, setModeParamsInternal] = useState<ModeSpecificParams>({ ...DEFAULT_MODE_PARAMS });
 

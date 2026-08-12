@@ -2,48 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useServerBenchmark } from "@/hooks/use-server-benchmark";
-import { OpsPresetSelector } from "@/components/stress-test/OpsPresetSelector";
+import { OpsLogSlider } from "@/components/stress-test/OpsLogSlider";
 import { BenchmarkModeSelector } from "@/components/stress-test/BenchmarkModeSelector";
-import { ConflictResultsDisplay } from "@/components/stress-test/ConflictResultsDisplay";
-import { RoomsResultsDisplay } from "@/components/stress-test/RoomsResultsDisplay";
-import { BreakdownResultsDisplay } from "@/components/stress-test/BreakdownResultsDisplay";
-import { SnapshotResultsDisplay } from "@/components/stress-test/SnapshotResultsDisplay";
+import { UnifiedResultsDisplay } from "@/components/stress-test/UnifiedResultsDisplay";
 import { GlowButton } from "@/components/ui/glow-button";
 import { GlassCard } from "@/components/ui/glass-card";
-import { MetricCounter } from "@/components/ui/metric-counter";
 import { BACKEND_URL } from "@/lib/constants";
-import type { BenchmarkMode, BenchmarkModeResponse } from "@/lib/stress-test-types";
-
-/** Presets for standard mode (resets state per batch — fast) */
-const STANDARD_PRESETS = [10_000, 50_000, 100_000, 500_000];
-
-/** Presets for accumulating modes (conflict, rooms, snapshot — state grows per batch) */
-const ACCUMULATING_PRESETS = [500, 1_000, 5_000, 10_000];
-
-/** Presets for breakdown mode (per-op timing — moderate) */
-const BREAKDOWN_PRESETS = [500, 1_000, 5_000, 10_000];
-
-/** Get appropriate presets for the current mode */
-function getPresetsForMode(mode: BenchmarkMode): number[] {
-  switch (mode) {
-    case "standard":
-      return STANDARD_PRESETS;
-    case "conflict":
-      return [1_000, 5_000, 10_000, 50_000];
-    case "snapshot":
-    case "rooms":
-      return [1_000, 5_000, 10_000, 50_000];
-    case "breakdown":
-      return BREAKDOWN_PRESETS;
-    default:
-      return ACCUMULATING_PRESETS;
-  }
-}
 
 /**
  * Returns an inline validation error message for the current mode params,
  * or null if params are valid.
- * Requirement 3.7: room count must be 2–50.
  */
 function getValidationError(
   mode: string,
@@ -55,17 +23,6 @@ function getValidationError(
     }
   }
   return null;
-}
-
-/** Formats elapsed seconds into a relative "time ago" string */
-function formatTimeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds} seconds ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours} hour${hours > 1 ? "s" : ""} ago`;
 }
 
 export function ServerBenchmarkSection(): JSX.Element {
@@ -85,10 +42,7 @@ export function ServerBenchmarkSection(): JSX.Element {
 
   // Server connectivity status
   const [serverStatus, setServerStatus] = useState<"checking" | "connected" | "disconnected">("checking");
-  const [lastRunTimestamp, setLastRunTimestamp] = useState<number | null>(null);
-  const [timeAgoText, setTimeAgoText] = useState<string>("");
 
-  // Check server connectivity on mount
   useEffect(() => {
     let cancelled = false;
     async function checkHealth() {
@@ -100,58 +54,49 @@ export function ServerBenchmarkSection(): JSX.Element {
       }
     }
     checkHealth();
-    return () => { cancelled = true; };
+    // Re-check every 30 seconds
+    const interval = setInterval(checkHealth, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
-
-  // Track last run timestamp when results arrive
-  useEffect(() => {
-    if (state.status === "completed" && state.results) {
-      setLastRunTimestamp(Date.now());
-    }
-  }, [state.status, state.results]);
-
-  // Update "time ago" text every second
-  useEffect(() => {
-    if (!lastRunTimestamp) return;
-    setTimeAgoText(formatTimeAgo(lastRunTimestamp));
-    const interval = setInterval(() => {
-      setTimeAgoText(formatTimeAgo(lastRunTimestamp));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [lastRunTimestamp]);
 
   return (
     <GlassCard className="col-span-full">
       <div className="flex flex-col gap-6">
-        {/* Header with status indicator */}
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between">
+        {/* Header with status */}
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold text-foreground">
               Server Benchmark
             </h2>
-            <div className="flex items-center gap-2 text-xs text-foreground-muted">
-              <span
-                className={`inline-block h-2 w-2 rounded-full ${
-                  serverStatus === "connected"
-                    ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]"
-                    : serverStatus === "disconnected"
-                    ? "bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]"
-                    : "bg-yellow-500 animate-pulse"
-                }`}
-                aria-hidden="true"
-              />
-              <span aria-label={`Server status: ${serverStatus}`}>
-                {serverStatus === "connected" ? "Connected" : serverStatus === "disconnected" ? "Disconnected" : "Checking…"}
-              </span>
-            </div>
+            <p className="text-sm text-foreground-muted">
+              Rust CRDT merge engine — POST /benchmark
+            </p>
           </div>
-          <p className="text-sm text-foreground-muted">
-            Measures Rust merge-engine throughput on the backend via POST
-            /benchmark.
-          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setServerStatus("checking");
+              fetch(`${BACKEND_URL}/health`).then(r => {
+                setServerStatus(r.ok ? "connected" : "disconnected");
+              }).catch(() => setServerStatus("disconnected"));
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-mono border border-border hover:border-border-hover transition-colors"
+            aria-label="Check server connection"
+          >
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                serverStatus === "connected"
+                  ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]"
+                  : serverStatus === "disconnected"
+                  ? "bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]"
+                  : "bg-yellow-500 animate-pulse"
+              }`}
+            />
+            {serverStatus === "connected" ? "Connected" : serverStatus === "disconnected" ? "Disconnected" : "Checking…"}
+          </button>
         </div>
 
-        {/* Mode selector: Requirement 6.1, 6.2, 6.4 */}
+        {/* Mode selector */}
         <BenchmarkModeSelector
           selectedMode={selectedMode}
           onModeChange={setSelectedMode}
@@ -160,29 +105,29 @@ export function ServerBenchmarkSection(): JSX.Element {
           onModeParamsChange={setModeParams}
         />
 
-        {/* Inline validation error: Requirement 3.7 */}
+        {/* Validation error */}
         {validationError && (
           <div
             role="alert"
-            aria-live="assertive"
             className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive font-mono"
           >
             {validationError}
           </div>
         )}
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <OpsPresetSelector
-            presets={getPresetsForMode(selectedMode)}
-            selected={selectedOps}
-            onSelect={setSelectedOps}
-            disabled={isRunning}
-            ariaLabel="Server benchmark operation count"
-          />
+        {/* Log-scale slider + Run button */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="flex-1">
+            <OpsLogSlider
+              value={selectedOps}
+              onChange={setSelectedOps}
+              disabled={isRunning}
+            />
+          </div>
 
           <GlowButton
             onClick={runBenchmark}
-            disabled={isRunning || validationError !== null}
+            disabled={isRunning || validationError !== null || serverStatus === "disconnected"}
             aria-label="Run server benchmark"
           >
             {isRunning ? (
@@ -211,129 +156,26 @@ export function ServerBenchmarkSection(): JSX.Element {
                 Running…
               </>
             ) : (
-              "Run Server Benchmark"
+              "Run Benchmark"
             )}
           </GlowButton>
         </div>
 
+        {/* Error display */}
         {state.error && (
           <div
             role="alert"
-            aria-live="assertive"
             className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive font-mono"
           >
             {state.error}
           </div>
         )}
 
+        {/* Unified results — same layout for ALL modes */}
         {state.results && (
-          <BenchmarkResults results={state.results} />
-        )}
-
-        {/* Last run timestamp */}
-        {lastRunTimestamp && (
-          <p className="text-xs text-foreground-muted text-right">
-            Last run: {timeAgoText}
-          </p>
+          <UnifiedResultsDisplay results={state.results} />
         )}
       </div>
     </GlassCard>
-  );
-}
-
-/**
- * Renders the appropriate result display based on `results.mode`.
- * For standard mode, renders the existing metrics grid with memory.
- * For other modes, delegates to mode-specific components (which already
- * handle memory display internally).
- */
-function BenchmarkResults({
-  results,
-}: {
-  results: BenchmarkModeResponse;
-}): JSX.Element {
-  switch (results.mode) {
-    case "conflict":
-      return <ConflictResultsDisplay results={results} />;
-    case "rooms":
-      return <RoomsResultsDisplay results={results} />;
-    case "breakdown":
-      return <BreakdownResultsDisplay results={results} />;
-    case "snapshot":
-      return <SnapshotResultsDisplay results={results} />;
-    case "standard":
-    default:
-      return <StandardResultsDisplay results={results} />;
-  }
-}
-
-/** Standard mode results — matches the existing metrics grid + memory fields */
-function StandardResultsDisplay({
-  results,
-}: {
-  results: BenchmarkModeResponse;
-}): JSX.Element {
-  return (
-    <div className="flex flex-col gap-4" aria-live="polite">
-      {/* Hero metric: Ops/sec */}
-      <div className="flex flex-col items-center py-2">
-        <span className="text-4xl font-bold text-accent tabular-nums">
-          {results.opsPerSecond.toLocaleString()}
-        </span>
-        <span className="text-sm text-foreground-muted mt-1">ops/sec</span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <MetricCounter
-          value={results.totalOps}
-          label="Total Ops"
-          suffix="ops"
-        />
-        <MetricCounter
-          value={results.elapsedMs}
-          label="Elapsed"
-          suffix="ms"
-          decimals={results.elapsedMs >= 1000 ? 2 : 0}
-        />
-        <MetricCounter
-          value={results.p50Ms}
-          label="P50"
-          suffix="ms"
-          decimals={2}
-        />
-        <MetricCounter
-          value={results.p99Ms}
-          label="P99"
-          suffix="ms"
-          decimals={2}
-        />
-        <MetricCounter
-          value={results.batchesProcessed}
-          label="Batches"
-        />
-      </div>
-
-      {results.memoryPeakMb != null && results.memoryDeltaMb != null && (
-        <div className="border-t border-border/50 pt-4">
-          <h4 className="text-xs font-medium text-foreground-muted mb-3">
-            Memory Usage
-          </h4>
-          <div className="grid grid-cols-2 gap-4">
-            <MetricCounter
-              value={results.memoryPeakMb}
-              label="Peak Heap"
-              suffix="MB"
-              decimals={2}
-            />
-            <MetricCounter
-              value={results.memoryDeltaMb}
-              label="Memory Delta"
-              suffix="MB"
-              decimals={2}
-            />
-          </div>
-        </div>
-      )}
-    </div>
   );
 }

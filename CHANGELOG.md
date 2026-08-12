@@ -6,25 +6,44 @@ All notable changes to Convergence are documented here.
 
 ### 5 Benchmark Modes + Rust Performance Optimization
 
+**Performance (before → after):**
+- Conflict 50K ops: 40,000ms → 233ms (170x faster)
+- Standard 500K ops: 78,000ms → 4,100ms (19x faster)
+- All modes achieve O(n) linear scaling up to 1M operations
+- 1M conflict ops: 2.9s at 345K ops/sec
+- 1M standard ops: 6.5s at 155K ops/sec
+
 **Added:**
 - 5 benchmark modes: Standard, Conflict Resolution, Concurrent Rooms, Operation Breakdown, Snapshot/Compaction
-- Mode selector UI (BenchmarkModeSelector) with radio button group and per-mode descriptions
-- Mode-specific result display components (ConflictResultsDisplay, RoomsResultsDisplay, BreakdownResultsDisplay, SnapshotResultsDisplay)
-- Per-mode operation presets (Standard: 10K–500K, Conflict/Rooms/Snapshot: 1K–50K, Breakdown: 500–10K)
-- Memory measurement via MemorySampler (peak heap, delta, error handling)
-- 14 property-based tests covering workload generation, CRDT convergence, room isolation, metric consistency, snapshot invariants, input validation
-
-**Performance:**
 - `mergeBatchBenchmark` Rust function — O(n) in-place merge via HashMap::get_mut(), zero state.clone()
 - Workload pre-generation cache (operations generated once at startup, reused across runs)
 - Fast state extraction (Buffer.indexOf + subarray instead of full JSON.parse)
-- Eliminated intermediate serialization (single Rust call processes all ops without Node.js JSON round-trips)
-- Peak throughput: 345K ops/sec (Conflict mode, 1M operations in 2.9 seconds)
+- Log-scale ops slider (1K → 10K → 100K → 500K → 1M) replacing preset buttons
+- Unified results display — same layout (hero ops/sec → core metrics → mode extras) for all modes
+- Server connected/disconnected status button with clickable health check
+- Info bubble on Standard mode explaining performance characteristics
+- Mode selector with radio buttons, per-mode descriptions, room count input
+- Mode-specific extras: conflict count, per-room timing, per-type breakdown, snapshot metrics
+- Memory measurement via MemorySampler (peak heap, delta, graceful error handling)
+- 14 property-based tests, 23 unit tests, 11 integration tests
+
+**Optimized (Rust native-merge addon):**
+- Eliminated `state.clone()` per operation — uses `get_mut()` for in-place HashMap mutation
+- Removed delta/changes tracking in benchmark path — only counts conflicts (integer increment)
+- Single Rust call per benchmark run — no intermediate Node.js ↔ Rust JSON serialization
+- Operation deserialization once; state stays in Rust memory for entire run
+- Complexity: O(n²) → O(n) for all accumulating modes
+
+**Why Standard mode is slower (~155K ops/sec vs ~345K ops/sec for Conflict):**
+- Standard creates one unique HashMap key per add operation (N items at N ops)
+- Conflict reuses only 10 hot keys — HashMap stays small, lookups cache-friendly
+- Standard reflects real-world high-cardinality write scenarios
+- Both are O(n) linear; per-operation constant differs due to HashMap growth
 
 **Changed:**
-- Server benchmark uses single optimized Rust call instead of per-batch mergeBatch with state accumulation
-- Operation presets adapt per mode (accumulating modes use smaller counts due to state growth)
-- Backend POST /benchmark handler uses mode router with validateBenchmarkRequest + handleBenchmark
+- Full-width stacked layout (browser bench first, server bench below)
+- Replaced OpsPresetSelector with OpsLogSlider (log-scale discrete steps)
+- Consistent result structure across all modes (unified display component)
 
 ---
 

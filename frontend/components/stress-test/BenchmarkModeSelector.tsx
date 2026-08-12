@@ -77,6 +77,18 @@ export function BenchmarkModeSelector({
         {description}
       </p>
 
+      {/* Info note for standard mode — explains why it's slower */}
+      {selectedMode === "standard" && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-accent/5 border border-accent/20 text-xs text-foreground-muted">
+          <span className="text-accent mt-0.5 shrink-0">ℹ</span>
+          <span>
+            Standard mode creates a unique key per operation, growing the HashMap to N entries.
+            Other modes reuse a small key pool (10–100 keys), keeping lookups faster.
+            This reflects real-world write-heavy scenarios with high key cardinality.
+          </span>
+        </div>
+      )}
+
       {/* Mode-specific parameters: room count for "rooms" mode */}
       {selectedMode === "rooms" && (
         <div className="flex items-center gap-3">
