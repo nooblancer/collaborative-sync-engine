@@ -27,9 +27,17 @@ Multiple users can simultaneously edit shared state with perfect consistency. Th
 
 - **Stress Test** — 5 benchmark modes (Standard, Conflict, Rooms, Breakdown, Snapshot) supporting up to 1M operations with real-time throughput/latency/memory measurement
 - **Split-Screen Sync** — Two independent panels with batch add (1-100 cards), remove all, bidirectional sync
-- **Collaborative Whiteboard** — Draw shapes with dual bot collaborators (BotAlice + BotBob), start/stop toggles, clear board
+- **Collaborative Whiteboard** — Full-page infinite canvas (Excalidraw) with real-time multi-user sync, remote cursors, presence bar, shareable rooms
 - **Live Metrics** — Simulated real-time ops/sec, P50/P99, connection counts, 60s throughput chart
 - **Conflict Resolution** — Simulated LWW conflict events with competing clients and resolution reasons
+
+### Dedicated Pages
+
+| Route | Feature |
+|-------|---------|
+| `/stress-test` | Full benchmark dashboard — Engine (345K ops/s), Production (226K ops/s), Browser round-trip |
+| `/whiteboard` | Collaborative infinite canvas — draw offline or share a room for real-time collaboration |
+| `/blog` | Engineering build log from v1.0 to v2.5 |
 - **Architecture Diagram** — CSS flexbox layout with hover tooltips on nodes and edges
 - **Blog** — Full build log at `/blog` documenting the project from kickoff to V3 roadmap
 

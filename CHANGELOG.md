@@ -2,6 +2,40 @@
 
 All notable changes to Convergence are documented here.
 
+## [2.5.0] — June 2026
+
+### Collaborative Whiteboard Page
+
+**Added:**
+- `/whiteboard` dedicated page with full-viewport infinite canvas (Excalidraw, MIT)
+- Real-time multi-user collaboration via full-scene broadcast over WebSocket V2 ops channel
+- Local-first mode: draw offline immediately, click Share to start collaboration
+- Room sharing: 6-character room IDs, `?room=abc123` URL format, one-click Share button
+- Remote cursors via Excalidraw `collaborators` prop + awareness channel (60fps)
+- Presence bar showing connected users with display names and colors
+- Scene merge algorithm: version-based reconciliation (higher version wins, local priority on ties)
+- User-active guard: blocks incoming remote scenes while user is actively editing (300ms window)
+- Connection indicator (connected/reconnecting/disconnected states)
+- Exponential backoff reconnection (1s → 30s max)
+- State persistence within session: new joiners receive current scene snapshot from backend
+- Clear board button, per-user undo/redo, all Excalidraw tools (shapes, text, arrows, freehand, eraser)
+- Dark theme, touch/stylus support, pinch-to-zoom, infinite pan
+- 45 tests (property + unit + integration)
+
+**Architecture:**
+- Excalidraw handles canvas UI; our engine handles collaboration (WebSocket sync, CRDT storage, presence)
+- Full-scene broadcast (200ms debounce) instead of per-element CRDT (which had Excalidraw reconciliation issues)
+- Backend stores room scene as single `__scene__` CRDT item; delivers snapshot on room join
+- `createRoom()` made idempotent (returns existing room if ID matches)
+- `handleCreateRoom` sends state snapshot to joining clients
+
+**Changed:**
+- Navbar Share button triggers room creation on `/whiteboard` (replaces separate Collaborate button)
+- `useRoomId` hook pushes `?room=` into URL bar via `history.replaceState`
+- Landing page "Learn More" on whiteboard section → `/whiteboard`
+
+---
+
 ## [2.4.5] — August 2026
 
 ### Rust-Owned Room State + simd-json + Rayon

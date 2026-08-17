@@ -18,6 +18,16 @@ interface BlogPost {
 
 const posts: BlogPost[] = [
   {
+    slug: "v2-5-collaborative-whiteboard",
+    title: "V2.5: Collaborative Whiteboard — Excalidraw + Our CRDT Engine",
+    description: "A full-page infinite canvas with real-time multi-user collaboration. Local-first drawing, one-click room sharing, remote cursors, and presence — all powered by our WebSocket V2 protocol and Rust CRDT backend.",
+    content: "The whiteboard page brings everything together: Excalidraw provides the canvas UI (infinite pan/zoom, professional drawing tools, per-user undo/redo, touch support) while our engine handles the hard part — real-time collaboration across browsers.\n\nThe sync architecture went through 3 iterations:\n\n1. Per-element CRDT sync (FAILED) — Tried diffing individual elements and syncing via field-level LWW merge. Excalidraw's internal element reconciliation rejected externally-modified elements regardless of version bumps.\n\n2. Full-scene replace (PARTIALLY WORKED) — Broadcasting the entire scene on every change. Problem: last-writer-wins meant one user's drawings erased the other's.\n\n3. Full-scene broadcast with merge (FINAL) — Send full scene, but MERGE on receive instead of replace. New elements get added, existing elements update only if remote version is strictly higher. Local priority on ties prevents overwrite during active editing.\n\nKey implementation details:\n• 200ms debounce before broadcasting (reduces chatter)\n• 300ms user-active guard (blocks incoming scenes while you're editing)\n• Remote cursors via Excalidraw's collaborators prop + WebSocket awareness channel\n• Presence derived from awareness data (updates in real-time, no stale entries)\n• Room IDs are 6-char random strings, no prefix\n• Local-first: canvas works offline, Share button enables collaboration\n• Backend stores scene as single __scene__ CRDT item, delivers snapshot on room join\n• createRoom() made idempotent (second joiner gets existing room, not fresh empty one)\n\nThe 'Collaborate' UX: visit /whiteboard → draw locally → click navbar Share → room created + URL copied → paste in another browser → both users see each other's cursors and drawings sync in real-time.\n\nWhat we learned: Excalidraw's npm package explicitly does NOT include collaboration. You must build the sync layer yourself. The per-element approach that works for custom canvases does NOT work with Excalidraw due to its internal immutable element management. Full-scene sync with intelligent merge is the correct approach — and it's how excalidraw.com itself works.",
+    date: "June 2026",
+    readTime: "5 min",
+    tag: "Release",
+    status: "current",
+  },
+  {
     slug: "v2-4-5-production-engine",
     title: "V2.4.5: Production-Grade Rust Engine — Room State, simd-json, Rayon",
     description: "The production-ready Rust engine with Rust-owned room state, simd-json, Rayon parallelism — plus fixing a measurement error that made engine benchmarks appear slower than production.",
@@ -25,7 +35,7 @@ const posts: BlogPost[] = [
     date: "June 2026",
     readTime: "5 min",
     tag: "Release",
-    status: "current",
+    status: "published",
   },
   {
     slug: "performance-optimization-research",
