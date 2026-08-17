@@ -17,13 +17,21 @@ const sectionLinks = [
 export default function Navbar() {
   const pathname = usePathname();
   const isStressTest = pathname === "/stress-test";
+  const isWhiteboard = pathname === "/whiteboard";
+  const showShareButton = isStressTest || isWhiteboard;
   const [copied, setCopied] = useState(false);
 
   const handleShare = useCallback(async () => {
+    // On whiteboard: start collaboration first if not already in a room
+    if (isWhiteboard && typeof window !== "undefined" && (window as any).__whiteboardStartCollab) {
+      (window as any).__whiteboardStartCollab();
+      // Small delay to let URL update
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
     await navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, []);
+  }, [isWhiteboard]);
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -54,7 +62,7 @@ export default function Navbar() {
           >
             <Github className="h-5 w-5" />
           </a>
-          {isStressTest ? (
+          {showShareButton ? (
             <button
               onClick={() => void handleShare()}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-background border border-accent shadow-[0_0_12px_rgba(0,255,255,0.3)] hover:bg-background-surface hover:text-foreground-muted hover:border-border hover:shadow-none transition-all duration-200"

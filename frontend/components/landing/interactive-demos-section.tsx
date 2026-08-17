@@ -295,7 +295,7 @@ export default function InteractiveDemosSection() {
                   Draw on the canvas — a simulated collaborator will mirror the multi-user experience in real-time.
                 </p>
                 <a
-                  href="#architecture"
+                  href="/whiteboard"
                   className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors shrink-0"
                 >
                   Learn More →

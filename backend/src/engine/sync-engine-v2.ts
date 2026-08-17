@@ -118,6 +118,12 @@ export class SyncEngineV2 {
   createRoom(roomId?: string): Room {
     const id = roomId ?? randomUUID();
 
+    // Return existing room if one already exists with this ID
+    const existing = this.rooms.get(id);
+    if (existing) {
+      return existing;
+    }
+
     const room: Room = {
       id,
       state: createEmptyState(id),

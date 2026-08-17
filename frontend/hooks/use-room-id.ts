@@ -64,6 +64,16 @@ export function useRoomId(options: UseRoomIdOptions): UseRoomIdReturn {
 
   const roomId = roomIdRef.current;
 
+  // Push the room ID into the URL (without navigation) so the browser URL bar always reflects the room
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("room") !== roomId) {
+      url.searchParams.set("room", roomId);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [roomId]);
+
   const getShareUrl = useCallback((): string => {
     if (typeof window === "undefined") {
       return "";

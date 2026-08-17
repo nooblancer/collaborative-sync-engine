@@ -514,6 +514,28 @@ export class ConnectionManagerV2 {
     }
     this.roomClients.get(room.id)!.add(client.clientId);
 
+    // Send current state snapshot to the joining client (if room has existing state)
+    const state = this.syncEngine.getState(room.id);
+    if (state && Object.keys(state.items).length > 0) {
+      const snapshotFrame: ServerFrame = {
+        channel: "ops",
+        roomId: room.id,
+        type: "delta",
+        payload: {
+          sessionId: room.id,
+          changes: Object.entries(state.items)
+            .filter(([, item]) => item.removedAt === null)
+            .map(([itemId, item]) => ({
+              itemId,
+              type: "add" as const,
+              fields: item,
+            })),
+          timestamp: state.lastUpdated,
+        },
+      };
+      this.sendToClient(client, snapshotFrame);
+    }
+
     this.sendControlResponse(client, room.id, {
       type: "create-room",
       status: "created",
